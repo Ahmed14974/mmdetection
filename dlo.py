@@ -28,15 +28,15 @@ def dlo():
 
     # Find contours
     # https://github.com/opencv/opencv/blob/4.x/samples/python/contours.py
-    contours0, hierarchy = cv.findContours(thinned.copy(), cv.RETR_TREE, 
-                                            cv.CHAIN_APPROX_SIMPLE)
+    contours0, hierarchy = cv.findContours(thinned.copy(), mode = cv.RETR_TREE, 
+                                            method = cv.CHAIN_APPROX_SIMPLE)
     contours = [cv.approxPolyDP(cnt, 3, True) for cnt in contours0]
     h, w = thinned.shape[:2]
     levels = 0
     vis = np.zeros((h, w, 3), np.uint8)
-    cv.drawContours(vis, contours, -1, (128,255,255), 3, cv.LINE_AA, 
+    cv.drawContours(vis, contours, -1, (128,255,255), 1, cv.LINE_AA, 
                     hierarchy, abs(levels) )
     print(np.count_nonzero(vis))
-    Image.fromarray(vis).save("dlo_contour.png")
+    Image.fromarray(vis).save("dlo_contour_test_2.png")
 
 dlo()
