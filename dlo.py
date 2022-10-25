@@ -18,10 +18,10 @@ def dlo():
 
     # Skeletonize
     def skeleton(image):
-        thinned = thin(image).astype(np.uint8) #ndarray -> ndarray(bool)
+        thinned = thin(image, max_iter = 5).astype(np.uint8) #ndarray -> ndarray(bool)
         print(np.count_nonzero(thinned))
         thinned_proc = 255 * thinned
-        Image.fromarray(thinned_proc).save("dlo_thin.png")
+        Image.fromarray(thinned_proc).save("dlo_thin_max5.png")
         print(thinned.shape)
         return thinned 
     thinned = skeleton(image)
@@ -37,6 +37,6 @@ def dlo():
     cv.drawContours(vis, contours, -1, (128,255,255), 1, cv.LINE_AA, 
                     hierarchy, abs(levels) )
     print(np.count_nonzero(vis))
-    Image.fromarray(vis).save("dlo_contour_test_2.png")
+    Image.fromarray(vis).save("dlo_contour_max5.png")
 
 dlo()
