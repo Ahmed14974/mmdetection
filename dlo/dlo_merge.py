@@ -119,14 +119,14 @@ def merge_all_chains(pruned):
 
     return to_merge
 
-def draw_chain(chain, h ,w, img_path='dlo_segments_merged.png', color=0):
+def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', color=0):
     """Generates an image of a chain.
 
     Args:
         chain: List of form [[s1, s2, ...]] to be drawn. 
         h (int): Height of final img
         w (int): Width of final img
-        img_path (str, optional): Save path of generated image. Defaults to 'dlo_segments_merged.png'.
+        img_path (str, optional): Save path of generated image. Defaults to 'dlo_test_imgs/dlo_segments_merged.png'.
         color (int, optional): Desired color of drawn line. Defaults to 0.
     """
     vis = np.zeros((h, w, 3), np.uint8)
