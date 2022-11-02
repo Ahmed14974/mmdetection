@@ -204,8 +204,6 @@ def prune(chain_colln):
     print(chain_colln)
     return chain_colln
             
-
-
 def dlo():
     # read data. Currently dataset masks but probably want 
     # model output masks eventually
@@ -241,3 +239,10 @@ def dlo():
     draw_chain_collns(pruned, h, w)
 
 dlo()
+
+"""
+TODO: other images to check work so far
+Then start pruning
+Think about using instance segs in merging step 
+Start with semantic seg as in paper for now
+"""
