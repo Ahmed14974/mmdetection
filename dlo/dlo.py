@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 import cv2 as cv 
 import itertools
+from dlo_merge import *
 
 l_s = 10 # 10 pixels is their param. Can improve
 max_angle = 0.25 # radians
@@ -230,13 +231,17 @@ def dlo():
     cv.drawContours(vis, contours0, -1, (128,255,255), 1, cv.LINE_AA, 
                     hierarchy, abs(levels) )
     print(np.count_nonzero(vis))
-    Image.fromarray(vis).save("dlo_contour_max5.png")
+    Image.fromarray(vis).save("dlo_contour_max6.png")
     
     #fit and prune doo segments 
     chain_collns = [traverseContour(contour) for contour in contours0]
     # draw_chain_collns(chain_collns, h, w)
     pruned = [prune(chain_colln) for chain_colln in chain_collns]
     draw_chain_collns(pruned, h, w)
+
+    # merge and draw chains
+    merged = merge_all_chains(pruned)
+    draw_chain(merged)
 
 dlo()
 
