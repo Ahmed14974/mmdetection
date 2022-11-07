@@ -9,6 +9,8 @@ from dlo_merge import *
 l_s = 10 # 10 pixels is their param. Can improve
 max_angle = 0.25 # radians
 rect_width = 3 #pixels
+img_dir = "dlo_test_imgs"
+img_idx = 2
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
@@ -77,10 +79,10 @@ def traverseContour(cnt):
 Get skeleton from white on black image.
 """
 def skeleton(image):
-    thinned = thin(image, max_iter = 5).astype(np.uint8) #ndarray -> ndarray(bool)
+    thinned = thin(image, max_iter = 5).astype(np.uint8)
     print(np.count_nonzero(thinned))
     thinned_proc = 255 * thinned
-    # Image.fromarray(thinned_proc).save("dlo_thin_max5.png")
+    Image.fromarray(thinned_proc).save(f"{img_dir}/dlo_{img_idx}_thin_max5.png")
     print(thinned.shape)
     return thinned 
 
@@ -93,7 +95,7 @@ def draw_chain_collns(chain_collns, h, w):
                 cv.line(vis, segment[0][0], segment[1][0], (color, 255 - color, 255), 1)
             print(np.count_nonzero(vis))
             color += 30
-    Image.fromarray(vis).save(f"dlo_segments_pruned.png")
+    Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_segments_pruned.png")
 
 """
 Given midpoints of opposite side of rectangle and fixed width, find corners.
@@ -211,11 +213,11 @@ def dlo():
     df = pd.read_csv('/deep/group/aicc-bootcamp/cloud-pollution/data/'\
                     'combined_v3_typed_new_composite/COCO_format_cropped/train.csv')
     df = df[df['contains_shiptrack']]
-    image = df.iloc[0]['mask']   # loop over rows eventually
+    image = df.iloc[img_idx]['mask']   # loop over rows eventually
     image = np.load(image)      
     print(np.count_nonzero(image))
     image_proc = np.abs(image.astype(int)).astype(np.uint8)
-    # Image.fromarray(image_proc).save("dlo_orig.png")
+    Image.fromarray(image_proc).save(f"{img_dir}/dlo_{img_idx}_orig.png")
 
     # Skeletonize
     thinned = skeleton(image)
@@ -231,7 +233,7 @@ def dlo():
     cv.drawContours(vis, contours0, -1, (128,255,255), 1, cv.LINE_AA, 
                     hierarchy, abs(levels) )
     print(np.count_nonzero(vis))
-    Image.fromarray(vis).save("dlo_contour_max6.png")
+    Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_contour_max6.png")
     
     #fit and prune doo segments 
     chain_collns = [traverseContour(contour) for contour in contours0]
@@ -241,13 +243,13 @@ def dlo():
 
     # merge and draw chains
     merged = merge_all_chains(pruned)
+    return 
     draw_chain(merged)
 
 dlo()
 
 """
 TODO: other images to check work so far
-Then start pruning
 Think about using instance segs in merging step 
 Start with semantic seg as in paper for now
 """
