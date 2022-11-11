@@ -4,6 +4,7 @@ Helper functions for merge step (Step G) of DLO method.
 import numpy as np 
 import math
 
+l_s = 10
 """
 Functions with *_cost calculate the cost of merging two segments. 
 
@@ -94,18 +95,22 @@ def merge_two_chains(c1, c2):
     t1_ahead = is_ahead(dist_1, dist_2, e2, c2[index2][-1 - index2], lines_intersection)
     t2_ahead = is_ahead(dist_2, dist_1, e1, c1[index1][-1 - index1], lines_intersection)
     new_chain = []
+    scenario = ""
+    e1toe2 = True
     if t1_ahead and t2_ahead: #scenario 10b 
-        print("10b") #turn radius "as desired"
+        scenario = "b"
     elif t1_ahead or t2_ahead: #scenario 10a
         print(f"t1_ahead is {t1_ahead}, t2_ahead is {t2_ahead}")
         if t1_ahead: # use circ1. going e1 to e2.
             new_chain = draw_arc_then_line(dist_1, dist_2, lines_intersection, 
-                                            e1, e2, c1[index1], c2[index2])        
+                                            e1[0], e2[0], c1[index1], c2[index2])        
         else: #going e2 to e1.
             new_chain = draw_arc_then_line(dist_2, dist_1, lines_intersection, 
-                                            e2, e1, c2[index2], c1[index1])
+                                            e2[0], e1[0], c2[index2], c1[index1])
+        scenario = "a"
+        e1toe2 = False   
     else: #scenario 10c
-        print("10c")
+        scenario = "c"
     
     ret = []
     # TODO: figure out if need to flip new_chain to fit between them
@@ -226,6 +231,7 @@ def is_ahead(other_dist, seg_dist, seg_end_to_connect, other_seg_end, lines_inte
             ((not pointing_to) and other_dist > seg_dist))
 
 def find_t(target_dist, other_dist, lines_intersection, other_arrow_end):
+    print(target_dist, other_dist, lines_intersection, other_arrow_end)
     ratio = target_dist / other_dist 
     del_x = (lines_intersection[0] - other_arrow_end[0]) * ratio
     del_y = (lines_intersection[1] - other_arrow_end[1]) * ratio
@@ -266,19 +272,36 @@ Using that radius to tangent point is perp to tangent line, we get
 TODO: Should error check for horiz/vertical
 """
 def find_circ_center(tangent_pt1, tangent_line1, tangent_pt2, tangent_line2):
-    perp1 = (tangent_line1[0][1] - tangent_line1[1][1] / 
-            tangent_line1[0][0] - tangent_line1[1][0])
-    perp2 = (tangent_line2[0][1] - tangent_line2[1][1] / 
-            tangent_line2[0][0] - tangent_line2[1][0])
+    """
+    Return:
+        center of tangent circle: (x,y)
+    Args: 
+        tangent_pt1: [x, y]
+        tangent_line1: (array([[x1, y1]]), array([[x2, y2]]))
+        tangent_pt2: (x, y)
+        tangent_line2: (array([[x1, y1]]), array([[x2, y2]]))
+    """
+    perp1 = (tangent_line1[0][0][1] - tangent_line1[1][0][1] / 
+            tangent_line1[0][0][0] - tangent_line1[1][0][0])
+    perp2 = (tangent_line2[0][0][1] - tangent_line2[1][0][1] / 
+            tangent_line2[0][0][0] - tangent_line2[1][0][0])
     x = (((perp2 * tangent_pt2[0] - perp1 * tangent_pt1[0]) - 
             (tangent_pt2[1] - tangent_pt1[1])) / (perp2 - perp1))
-    y = perp1(x - tangent_pt1[0]) + tangent_pt1[1] 
+    y = perp1*(x - tangent_pt1[0]) + tangent_pt1[1] 
     return (x,y)
 
 def ang(lineA, lineB):
+    """
+    Args:
+        lineA: ((x1, y1), array([x2, y2]))
+        lineB:(array([[x1, y1]]), array([[x2, y2]]))
+    Return:
+        Angle between lineA and lineB, less than 180 degrees.
+    """
+    print(lineA, lineB)
     # Get nicer vector form
     vA = [(lineA[0][0]-lineA[1][0]), (lineA[0][1]-lineA[1][1])]
-    vB = [(lineB[0][0]-lineB[1][0]), (lineB[0][1]-lineB[1][1])]
+    vB = [(lineB[0][0][0]-lineB[1][0][0]), (lineB[0][0][1]-lineB[1][0][1])]
     # Get dot prod
     dot_prod = np.dot(vA, vB)
     # Get magnitudes
