@@ -242,9 +242,8 @@ def dlo():
     draw_chain_collns(pruned, h, w)
 
     # merge and draw chains
-    merged = merge_all_chains(pruned)
-    return 
-    draw_chain(merged)
+    merged = merge_all_chains(pruned) 
+    draw_chain(merged, h, w, 'dlo_test_imgs/dlo_segments_merged_with_a.png')
 
 dlo()
 
