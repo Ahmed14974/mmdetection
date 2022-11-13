@@ -4,6 +4,7 @@ Helper functions for merge step (Step G) of DLO method.
 import numpy as np 
 import math
 import cv2 as cv 
+from PIL import Image, ImageDraw
 
 l_s = 10
 """
@@ -103,17 +104,17 @@ def merge_two_chains(c1, c2):
     elif t1_ahead or t2_ahead: #scenario 10a
         if t1_ahead: # use circ1. going e1 to e2.
             new_chain = draw_arc_then_line(dist_1, dist_2, lines_intersection, 
-                                            e1[0], e2[0], c1[index1], c2[index2])        
+                                            e1, e2, c1[index1], c2[index2])        
         else: #going e2 to e1.
             new_chain = draw_arc_then_line(dist_2, dist_1, lines_intersection, 
-                                            e2[0], e1[0], c2[index2], c1[index1])
+                                            e2, e1, c2[index2], c1[index1])
         scenario = "a"
         e1toe2 = False   
     else:
         scenario = "c"
-    if scenario != "a":
-        # return [c1, c2]
-        print(f"scenario {scenario}")
+    # if scenario != "a":
+    #     return [c1, c2]
+    print(f"scenario {scenario}")
     return concatenate_with_new_chain(to_connect, c1, c2, new_chain, e1toe2)
 
 def concatenate_with_new_chain(to_connect, c1, c2, new_chain, e1toe2):
@@ -143,41 +144,57 @@ def concatenate_with_new_chain(to_connect, c1, c2, new_chain, e1toe2):
 
 def draw_arc_then_line(dist_i, dist_j, lines_intersection, 
                         ei, ej, last_segi, last_segj):
+    """Args:
+        dist_i, dist_j float 
+        lines_intersection [[float_x float_y]] 
+        ei, ej [[x y]]
+        last_segi, last_segj (array([[x0 y0]]), array([[x1, y1]]))
+    """
     new_chain = []
-    ti = find_t(dist_i, dist_j, lines_intersection, ej)
+    ti = find_t(dist_i, dist_j, lines_intersection, ej[0])
     circi_center = find_circ_center(ei, last_segi, ti, last_segj)
     circi_r = np.linalg.norm(ei - circi_center) 
     print(f"center and radius are {circi_center}, {circi_r}")
     p_s = ei
-    candidates = get_circle_intersections(ei[0], ei[1], l_s, 
-                                            circi_center[0], 
-                                            circi_center[1], circi_r)
+    candidates = get_circle_intersections(ei[0][0], ei[0][1], l_s, 
+                                            circi_center[0][0], 
+                                            circi_center[0][1], circi_r)
+    print(f"candidates are {candidates}")
     p_e = ei
     if ang((candidates[0], ei), last_segi) > ang((candidates[1], ei), last_segi):
         p_e = candidates[0]
     else:
         p_e = candidates[1]
+    p_s = p_s.astype(int)
+    p_e = p_e.astype(int)
     new_chain.append((p_s, p_e))
+    print("new chain append", p_s, p_e)
     # go around the circle arc ei to ti
     while np.linalg.norm(ti - p_e) >= l_s:
         print("drawing around circle")
         prev_s = p_s
         p_s = p_e 
-        candidates = get_circle_intersections(p_s[0], p_s[1], l_s, 
-                                            circi_center[0], 
-                                            circi_center[1], circi_r)
-        if np.linalg.norm(candidates[0] - prev_s) < 0.01:
+        candidates = get_circle_intersections(p_s[0][0], p_s[0][1], l_s, 
+                                            circi_center[0][0], 
+                                            circi_center[0][1], circi_r)
+        if np.linalg.norm(candidates[0] - prev_s) < 2: # can finetune threshold
             p_e = candidates[1]
         else:
             p_e = candidates[0]
+        p_s = p_s.astype(int)
+        p_e = p_e.astype(int)
         new_chain.append((p_s, p_e))
+        print(p_s, p_e)
     remaining_dist = np.linalg.norm(ej - p_e)
-    del_x = (ej[0] - p_e[0]) * (l_s / remaining_dist)
-    del_y = (ej[1] - p_e[1]) * (l_s / remaining_dist)
+    del_x = (ej[0][0] - p_e[0][0]) * (l_s / remaining_dist)
+    del_y = (ej[0][1] - p_e[0][1]) * (l_s / remaining_dist)
     while np.linalg.norm(ej - p_e) >= l_s:
         p_s = p_e
-        p_e = (p_s[0] + del_x, p_s[1] + del_y)
+        p_e = p_s + np.array([[del_x, del_y]])
+        p_s = p_s.astype(int)
+        p_e = p_e.astype(int)
         new_chain.append((p_s, p_e))
+        print(p_s, p_e)
     return new_chain
 
 def merge_all_chains(pruned):
@@ -194,6 +211,7 @@ def merge_all_chains(pruned):
     for chain_clcn in pruned:
         for chain in chain_clcn:
             if chain:
+                print("chain b4 merge_all is", chain)
                 to_merge.append(chain)
 
         while len(to_merge) > 1:
@@ -203,17 +221,18 @@ def merge_all_chains(pruned):
             to_merge.append(merged)
 
     return to_merge
-#TODO: Fix type casting. suspect it's another of the np.array([[x y]]) or something
+
 def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', color=0):
     """Generates an image of a chain.
 
     Args:
-        chain: List of form [[s1, s2, ...]] to be drawn. 
+        chain: List of form [s1, s2, ...] to be drawn. 
         h (int): Height of final img
         w (int): Width of final img
         img_path (str, optional): Save path of generated image. Defaults to 'dlo_test_imgs/dlo_segments_merged.png'.
         color (int, optional): Desired color of drawn line. Defaults to 0.
     """
+    print("draw_chain drwing", chain)
     vis = np.zeros((h, w, 3), np.uint8)
     for segment in chain:
         cv.line(vis, segment[0][0], segment[1][0], (color, 255 - color, 255), 1)
@@ -234,7 +253,7 @@ def get_intersection(a1, a2, b1, b2):
     x, y, z = np.cross(l1, l2)          # point of intersection
     if z == 0:                          # lines are parallel
         return (float('inf'), float('inf'))
-    return np.array([x/z, y/z])
+    return np.array([[x/z, y/z]])
 
 """ 
 e1 closer to intersection than not e1 iff pointing toward intersection
@@ -248,11 +267,13 @@ def is_ahead(other_dist, seg_dist, seg_end_to_connect, other_seg_end, lines_inte
 
 def find_t(target_dist, other_dist, lines_intersection, other_arrow_end):
     ratio = target_dist / other_dist 
-    del_x = (lines_intersection[0] - other_arrow_end[0]) * ratio
-    del_y = (lines_intersection[1] - other_arrow_end[1]) * ratio
-    return np.array([(lines_intersection[0] - del_x), (lines_intersection[1] - del_y)])
+    del_x = (lines_intersection[0][0] - other_arrow_end[0]) * ratio
+    del_y = (lines_intersection[0][1] - other_arrow_end[1]) * ratio
+    return np.array([[(lines_intersection[0][0] - del_x), (lines_intersection[0][1] - del_y)]])
 
 def get_circle_intersections(x0, y0, r0, x1, y1, r1):
+    print("get_circ_intersections", x0, y0, r0, x1, y1, r1)
+    "Args: x0, y0, r0 int; x1, y1, r1 float"
     # circle 1: (x0, y0), radius r0
     # circle 2: (x1, y1), radius r1
 
@@ -278,7 +299,7 @@ def get_circle_intersections(x0, y0, r0, x1, y1, r1):
         x4=x2-h*(y1-y0)/d
         y4=y2+h*(x1-x0)/d
         
-        return np.array([x3, y3]), np.array([x4, y4])
+        return np.array([[x3, y3]]), np.array([[x4, y4]])
 
 """
 Using that radius to tangent point is perp to tangent line, we get
@@ -291,30 +312,32 @@ def find_circ_center(tangent_pt1, tangent_line1, tangent_pt2, tangent_line2):
     Return:
         center of tangent circle: np.array(x,y)
     Args: 
-        tangent_pt1: [x, y]
+        tangent_pt1: [[x, y]]
         tangent_line1: (array([[x1, y1]]), array([[x2, y2]]))
-        tangent_pt2: (x, y)
+        tangent_pt2: [[x, y]]
         tangent_line2: (array([[x1, y1]]), array([[x2, y2]]))
     """
+    print("find_circ_center", tangent_pt1, tangent_line1, tangent_pt2, tangent_line2)
     perp1 = -1 *((tangent_line1[0][0][0] - tangent_line1[1][0][0]) / # -1 / ((y1 - y2) / (x1 - x2)) = -(x1-x2) / (y1-y2)
             (tangent_line1[0][0][1] - tangent_line1[1][0][1]))
     perp2 = -1 * ((tangent_line2[0][0][0] - tangent_line2[1][0][0]) / 
             (tangent_line2[0][0][1] - tangent_line2[1][0][1]))
-    x = (((perp2 * tangent_pt2[0] - perp1 * tangent_pt1[0]) - 
-            (tangent_pt2[1] - tangent_pt1[1])) / (perp2 - perp1))
-    y = perp1*(x - tangent_pt1[0]) + tangent_pt1[1] 
-    return np.array([x,y])
+    x = (((perp2 * tangent_pt2[0][0] - perp1 * tangent_pt1[0][0]) - 
+            (tangent_pt2[0][1] - tangent_pt1[0][1])) / (perp2 - perp1))
+    y = perp1*(x - tangent_pt1[0][0]) + tangent_pt1[0][1] 
+    return np.array([[x,y]])
 
 def ang(lineA, lineB):
     """
     Args:
-        lineA: ((x1, y1), array([x2, y2]))
+        lineA: (array([[x1, y1]]), array([[x2, y2]]))
         lineB:(array([[x1, y1]]), array([[x2, y2]]))
     Return:
         Angle between lineA and lineB, less than 180 degrees.
     """
+    print("ang", lineA, lineB)
     # Get nicer vector form
-    vA = [(lineA[0][0]-lineA[1][0]), (lineA[0][1]-lineA[1][1])]
+    vA = [(lineA[0][0][0]-lineA[1][0][0]), (lineA[0][0][1]-lineA[1][0][1])]
     vB = [(lineB[0][0][0]-lineB[1][0][0]), (lineB[0][0][1]-lineB[1][0][1])]
     # Get dot prod
     dot_prod = np.dot(vA, vB)

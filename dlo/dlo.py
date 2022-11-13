@@ -243,12 +243,12 @@ def dlo():
 
     # merge and draw chains
     merged = merge_all_chains(pruned) 
-    draw_chain(merged, h, w, 'dlo_test_imgs/dlo_segments_merged_with_a.png')
+    draw_chain(merged[0], h, w, 'dlo_test_imgs/dlo_segments_merged_with_a.png')
 
 dlo()
 
 """
-TODO: other images to check work so far
+TODO:
 Think about using instance segs in merging step 
 Start with semantic seg as in paper for now
 """
