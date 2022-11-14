@@ -94,8 +94,12 @@ def merge_two_chains(c1, c2):
                                             c2[index2][0], c2[index2][-1])
     dist_1 = np.linalg.norm(e1 - lines_intersection) 
     dist_2 = np.linalg.norm(e2 - lines_intersection)
-    t1_ahead = is_ahead(dist_1, dist_2, e2, c2[index2][-1 - index2], lines_intersection)
-    t2_ahead = is_ahead(dist_2, dist_1, e1, c1[index1][-1 - index1], lines_intersection)
+    t1 = find_t(dist_1, dist_2, lines_intersection, e2[0])
+    t2 = find_t(dist_2, dist_1, lines_intersection, e1[0])
+    t1_ahead = is_ahead(t1, e2, c2[index2][-1 - index2])
+    t2_ahead = is_ahead(t2, e1, c1[index1][-1 - index1])
+    # t1_ahead = is_ahead(dist_1, dist_2, e2, c2[index2][-1 - index2], lines_intersection)
+    # t2_ahead = is_ahead(dist_2, dist_1, e1, c1[index1][-1 - index1], lines_intersection)
     new_chain = []
     scenario = ""
     e1toe2 = True
@@ -153,6 +157,7 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
     new_chain = []
     ti = find_t(dist_i, dist_j, lines_intersection, ej[0])
     circi_center = find_circ_center(ei, last_segi, ti, last_segj)
+    print("ei, ej, last_segi, ti, last_segj", ei, ej, last_segi, ti, last_segj)
     circi_r = np.linalg.norm(ei - circi_center) 
     print(f"center and radius are {circi_center}, {circi_r}")
     p_s = ei
@@ -260,11 +265,23 @@ e1 closer to intersection than not e1 iff pointing toward intersection
      t1 ahead of e2 if pointing toward & t1 closer to intersection than e2 or
      pointing away & t1 farther from intersection than e2
 """
+def is_ahead(ti, ej, tail_j):
+    """
+    Args: ti, ej, tail_j [[x y]] 
+
+    """
+    if ((ej[0][0] < ti[0][0] and ti[0][0] <= tail_j[0][0]) or 
+        (ej[0][0] > ti[0][0] and ti[0][0] >= tail_j[0][0])): # ti in between ej, tail_j
+        return False
+    dist_ti_ej = np.linalg.norm(ej - ti)
+    dist_ti_tailj = np.linalg.norm(tail_j - ti)
+    return dist_ti_ej < dist_ti_tailj
+"""
 def is_ahead(other_dist, seg_dist, seg_end_to_connect, other_seg_end, lines_intersection):
     pointing_to = (seg_dist < np.linalg.norm(other_seg_end - lines_intersection))
     return ((pointing_to and other_dist < seg_dist) or 
             ((not pointing_to) and other_dist > seg_dist))
-
+"""
 def find_t(target_dist, other_dist, lines_intersection, other_arrow_end):
     ratio = target_dist / other_dist 
     del_x = (lines_intersection[0][0] - other_arrow_end[0]) * ratio
@@ -272,7 +289,6 @@ def find_t(target_dist, other_dist, lines_intersection, other_arrow_end):
     return np.array([[(lines_intersection[0][0] - del_x), (lines_intersection[0][1] - del_y)]])
 
 def get_circle_intersections(x0, y0, r0, x1, y1, r1):
-    print("get_circ_intersections", x0, y0, r0, x1, y1, r1)
     "Args: x0, y0, r0 int; x1, y1, r1 float"
     # circle 1: (x0, y0), radius r0
     # circle 2: (x1, y1), radius r1

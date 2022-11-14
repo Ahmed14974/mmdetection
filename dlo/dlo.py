@@ -79,10 +79,10 @@ def traverseContour(cnt):
 Get skeleton from white on black image.
 """
 def skeleton(image):
-    thinned = thin(image, max_iter = 5).astype(np.uint8)
+    thinned = thin(image).astype(np.uint8)
     print(np.count_nonzero(thinned))
     thinned_proc = 255 * thinned
-    Image.fromarray(thinned_proc).save(f"{img_dir}/dlo_{img_idx}_thin_max5.png")
+    Image.fromarray(thinned_proc).save(f"{img_dir}/dlo_{img_idx}_thin.png")
     print(thinned.shape)
     return thinned 
 
@@ -233,7 +233,7 @@ def dlo():
     cv.drawContours(vis, contours0, -1, (128,255,255), 1, cv.LINE_AA, 
                     hierarchy, abs(levels) )
     print(np.count_nonzero(vis))
-    Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_contour_max6.png")
+    Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_contour.png")
     
     #fit and prune doo segments 
     chain_collns = [traverseContour(contour) for contour in contours0]
@@ -243,7 +243,7 @@ def dlo():
 
     # merge and draw chains
     merged = merge_all_chains(pruned) 
-    draw_chain(merged[0], h, w, 'dlo_test_imgs/dlo_segments_merged_with_a.png')
+    draw_chain(merged[0], h, w, f'dlo_test_imgs/dlo_{img_idx}_segments_merged_a.png')
 
 dlo()
 
