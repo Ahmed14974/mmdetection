@@ -10,7 +10,8 @@ l_s = 10 # 10 pixels is their param. Can improve
 max_angle = 0.25 # radians
 rect_width = 3 #pixels
 img_dir = "dlo_test_imgs"
-img_idx = 2
+# img_idx = 7 #1 is causing problems with no candidates for draw circle
+ALL_IMGS = False
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
@@ -80,10 +81,9 @@ Get skeleton from white on black image.
 """
 def skeleton(image):
     thinned = thin(image).astype(np.uint8)
-    print(np.count_nonzero(thinned))
     thinned_proc = 255 * thinned
-    Image.fromarray(thinned_proc).save(f"{img_dir}/dlo_{img_idx}_thin.png")
-    print(thinned.shape)
+    if ALL_IMGS:
+        Image.fromarray(thinned_proc).save(f"{img_dir}/dlo_{img_idx}_thin.png")
     return thinned 
 
 def draw_chain_collns(chain_collns, h, w):
@@ -93,7 +93,6 @@ def draw_chain_collns(chain_collns, h, w):
         for chain in colln:
             for segment in chain:
                 cv.line(vis, segment[0][0], segment[1][0], (color, 255 - color, 255), 1)
-            print(np.count_nonzero(vis))
             color += 30
     Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_segments_pruned.png")
 
@@ -207,7 +206,7 @@ def prune(chain_colln):
     print(chain_colln)
     return chain_colln
             
-def dlo():
+def dlo(img_idx):
     # read data. Currently dataset masks but probably want 
     # model output masks eventually
     df = pd.read_csv('/deep/group/aicc-bootcamp/cloud-pollution/data/'\
@@ -215,7 +214,6 @@ def dlo():
     df = df[df['contains_shiptrack']]
     image = df.iloc[img_idx]['mask']   # loop over rows eventually
     image = np.load(image)      
-    print(np.count_nonzero(image))
     image_proc = np.abs(image.astype(int)).astype(np.uint8)
     Image.fromarray(image_proc).save(f"{img_dir}/dlo_{img_idx}_orig.png")
 
@@ -232,20 +230,20 @@ def dlo():
     vis = np.zeros((h, w, 3), np.uint8)
     cv.drawContours(vis, contours0, -1, (128,255,255), 1, cv.LINE_AA, 
                     hierarchy, abs(levels) )
-    print(np.count_nonzero(vis))
-    Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_contour.png")
+    if ALL_IMGS:
+        Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_contour.png")
     
     #fit and prune doo segments 
     chain_collns = [traverseContour(contour) for contour in contours0]
-    # draw_chain_collns(chain_collns, h, w)
     pruned = [prune(chain_colln) for chain_colln in chain_collns]
     draw_chain_collns(pruned, h, w)
 
     # merge and draw chains
     merged = merge_all_chains(pruned) 
-    draw_chain(merged[0], h, w, f'dlo_test_imgs/dlo_{img_idx}_segments_merged_a.png')
+    draw_chain(merged[0], h, w, f'dlo_test_imgs/dlo_{img_idx}_segments_merged.png')
 
-dlo()
+for img_idx in range(8,9):
+    dlo(img_idx)
 
 """
 TODO:

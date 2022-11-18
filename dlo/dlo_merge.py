@@ -6,7 +6,8 @@ import math
 import cv2 as cv 
 from PIL import Image, ImageDraw
 
-l_s = 10
+l_s = 5
+COST_THRESHOLD = 50 # TODO: TUNE THIS
 """
 Functions with *_cost calculate the cost of merging two segments. 
 
@@ -65,7 +66,7 @@ def merge_cost(s1, s2, weights):
     return np.sum([w_c * curv_cost(s1,s2), w_d * dir_cost(s1,s2), w_e * euclidean_cost(s1,s2)])
 
 def merge_two_chains(c1, c2):
-    """Merges two chains based on lowest cost if type a in paper. Implement part H.
+    """Merges two chains based on lowest cost. Implement part H.
 
     Args:
         c1, c2: Lists of form [s1, s2, ...]
@@ -84,14 +85,24 @@ def merge_two_chains(c1, c2):
         s1, s2 = combo
         weights = [1,1,1]
         costs.append(merge_cost(s1, s2, weights))
+    print("costs is", costs)
+    if np.min(costs) > COST_THRESHOLD:
+        # TODO: change this to returning two chains separately. Temp returning c1+c2 to keep working code
+        return c1 + c2
+        # return [c1, c2]
 
     to_connect = combos[np.argmin(costs)] #segments to connect
     index1 = to_connect[0][-1] # head or tail of chain 1
     index2 = to_connect[-1][-1]
     e1 = c1[index1][index1] #if head segment, grab 0th endpoint. else grab -1th
     e2 = c2[index2][index2] 
+#TODO check if this is actually good- if < l_s size gap, just straight line b/w them
+    if np.linalg.norm(e1 - e2) < l_s:
+        return concatenate_with_new_chain(to_connect, c1, c2, [(e1, e2)], True)
+
     lines_intersection = get_intersection(c1[index1][0], c1[index1][-1], 
                                             c2[index2][0], c2[index2][-1])
+                                            #TODO what if o intersection/lines parallel
     dist_1 = np.linalg.norm(e1 - lines_intersection) 
     dist_2 = np.linalg.norm(e2 - lines_intersection)
     t1 = find_t(dist_1, dist_2, lines_intersection, e2[0])
@@ -104,21 +115,25 @@ def merge_two_chains(c1, c2):
     scenario = ""
     e1toe2 = True
     if t1_ahead and t2_ahead: #scenario 10b 
+        new_chain = draw_line(e1, e2)
         scenario = "b"
     elif t1_ahead or t2_ahead: #scenario 10a
         if t1_ahead: # use circ1. going e1 to e2.
             new_chain = draw_arc_then_line(dist_1, dist_2, lines_intersection, 
                                             e1, e2, c1[index1], c2[index2])        
         else: #going e2 to e1.
+            e1toe2 = False
             new_chain = draw_arc_then_line(dist_2, dist_1, lines_intersection, 
                                             e2, e1, c2[index2], c1[index1])
-        scenario = "a"
-        e1toe2 = False   
+        scenario = "a"   
     else:
+        new_chain = draw_line(e1, e2)
         scenario = "c"
     # if scenario != "a":
     #     return [c1, c2]
     print(f"scenario {scenario}")
+    print((f"chain c1 ends are {c1[:min(len(c1), 2)]} and {c1[max(-1 * len(c1), -2):]}", 
+            f"chain c2 ends are {c2[:min(len(c2), 2)]} and {c2[max(-1 * len(c2), -2):]}"))
     return concatenate_with_new_chain(to_connect, c1, c2, new_chain, e1toe2)
 
 def concatenate_with_new_chain(to_connect, c1, c2, new_chain, e1toe2):
@@ -146,6 +161,30 @@ def concatenate_with_new_chain(to_connect, c1, c2, new_chain, e1toe2):
     # return [ret] 
     return ret
 
+def draw_line(ei, ej):
+    """
+    Args: ei, ej
+    Return: chain of segments
+    """
+    new_chain = []
+    dist = np.linalg.norm(ej - ei)
+    del_x = (ej[0][0] - ei[0][0]) * (l_s / dist)
+    del_y = (ej[0][1] - ei[0][1]) * (l_s / dist)
+    p_s = ei
+    p_e = p_s
+    counter = 0
+    while np.linalg.norm(ej - p_e) >= l_s:
+        if counter == 10:
+            break
+        p_s = p_e
+        p_e = p_s + np.array([[del_x, del_y]])
+        p_s = p_s.astype(int)
+        p_e = p_e.astype(int)
+        new_chain.append((p_s, p_e))
+        print(p_s, p_e)
+        counter += 1
+    return new_chain
+
 def draw_arc_then_line(dist_i, dist_j, lines_intersection, 
                         ei, ej, last_segi, last_segj):
     """Args:
@@ -161,45 +200,57 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
     circi_r = np.linalg.norm(ei - circi_center) 
     print(f"center and radius are {circi_center}, {circi_r}")
     p_s = ei
-    candidates = get_circle_intersections(ei[0][0], ei[0][1], l_s, 
-                                            circi_center[0][0], 
-                                            circi_center[0][1], circi_r)
-    print(f"candidates are {candidates}")
     p_e = ei
-    if ang((candidates[0], ei), last_segi) > ang((candidates[1], ei), last_segi):
-        p_e = candidates[0]
-    else:
-        p_e = candidates[1]
-    p_s = p_s.astype(int)
-    p_e = p_e.astype(int)
-    new_chain.append((p_s, p_e))
-    print("new chain append", p_s, p_e)
-    # go around the circle arc ei to ti
-    while np.linalg.norm(ti - p_e) >= l_s:
-        print("drawing around circle")
-        prev_s = p_s
-        p_s = p_e 
-        candidates = get_circle_intersections(p_s[0][0], p_s[0][1], l_s, 
-                                            circi_center[0][0], 
-                                            circi_center[0][1], circi_r)
-        if np.linalg.norm(candidates[0] - prev_s) < 2: # can finetune threshold
-            p_e = candidates[1]
-        else:
+    if circi_r >= l_s / 2:
+        candidates = get_circle_intersections(ei[0][0], ei[0][1], l_s, 
+                                                circi_center[0][0], 
+                                                circi_center[0][1], circi_r)
+        print(f"candidates are {candidates}")
+        if ang((candidates[0], ei), last_segi) > ang((candidates[1], ei), last_segi):
             p_e = candidates[0]
+        else:
+            p_e = candidates[1]
         p_s = p_s.astype(int)
         p_e = p_e.astype(int)
         new_chain.append((p_s, p_e))
-        print(p_s, p_e)
+        print("new chain append", p_s, p_e)
+        ctr = 0
+        # go around the circle arc ei to ti
+        while np.linalg.norm(ti - p_e) >= l_s:
+            if ctr == 10:
+                break
+            print("drawing around circle")
+            prev_s = p_s
+            p_s = p_e 
+            candidates = get_circle_intersections(p_s[0][0], p_s[0][1], l_s, 
+                                                circi_center[0][0], 
+                                                circi_center[0][1], circi_r)
+            if np.linalg.norm(candidates[0] - prev_s) < 2: # can finetune threshold
+                p_e = candidates[1]
+            else:
+                p_e = candidates[0]
+            p_s = p_s.astype(int)
+            p_e = p_e.astype(int)
+            new_chain.append((p_s, p_e))
+            print(p_s, p_e)
+            ctr += 1
+    else:
+        new_chain = draw_line(ei, ti)
+        p_e = ti
     remaining_dist = np.linalg.norm(ej - p_e)
     del_x = (ej[0][0] - p_e[0][0]) * (l_s / remaining_dist)
     del_y = (ej[0][1] - p_e[0][1]) * (l_s / remaining_dist)
+    ctr = 0
     while np.linalg.norm(ej - p_e) >= l_s:
+        if ctr == 10:
+            break
         p_s = p_e
         p_e = p_s + np.array([[del_x, del_y]])
         p_s = p_s.astype(int)
         p_e = p_e.astype(int)
         new_chain.append((p_s, p_e))
         print(p_s, p_e)
+        ctr += 1
     return new_chain
 
 def merge_all_chains(pruned):
@@ -216,7 +267,7 @@ def merge_all_chains(pruned):
     for chain_clcn in pruned:
         for chain in chain_clcn:
             if chain:
-                print("chain b4 merge_all is", chain)
+                # print("chain b4 merge_all is", chain)
                 to_merge.append(chain)
 
         while len(to_merge) > 1:
@@ -237,7 +288,6 @@ def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', co
         img_path (str, optional): Save path of generated image. Defaults to 'dlo_test_imgs/dlo_segments_merged.png'.
         color (int, optional): Desired color of drawn line. Defaults to 0.
     """
-    print("draw_chain drwing", chain)
     vis = np.zeros((h, w, 3), np.uint8)
     for segment in chain:
         cv.line(vis, segment[0][0], segment[1][0], (color, 255 - color, 255), 1)
@@ -284,6 +334,7 @@ def is_ahead(other_dist, seg_dist, seg_end_to_connect, other_seg_end, lines_inte
 """
 def find_t(target_dist, other_dist, lines_intersection, other_arrow_end):
     ratio = target_dist / other_dist 
+    print("find_t", target_dist, other_dist, lines_intersection, other_arrow_end)
     del_x = (lines_intersection[0][0] - other_arrow_end[0]) * ratio
     del_y = (lines_intersection[0][1] - other_arrow_end[1]) * ratio
     return np.array([[(lines_intersection[0][0] - del_x), (lines_intersection[0][1] - del_y)]])
@@ -320,8 +371,6 @@ def get_circle_intersections(x0, y0, r0, x1, y1, r1):
 """
 Using that radius to tangent point is perp to tangent line, we get
 2 point-slope form equations. Intersection of lines is center of circle
-
-TODO: Should error check for horiz/vertical slopes
 """
 def find_circ_center(tangent_pt1, tangent_line1, tangent_pt2, tangent_line2):
     """
@@ -334,14 +383,32 @@ def find_circ_center(tangent_pt1, tangent_line1, tangent_pt2, tangent_line2):
         tangent_line2: (array([[x1, y1]]), array([[x2, y2]]))
     """
     print("find_circ_center", tangent_pt1, tangent_line1, tangent_pt2, tangent_line2)
-    perp1 = -1 *((tangent_line1[0][0][0] - tangent_line1[1][0][0]) / # -1 / ((y1 - y2) / (x1 - x2)) = -(x1-x2) / (y1-y2)
+    perp_line1 = None
+    perp_line2 = None
+    if (tangent_line1[0][0][0] == tangent_line1[1][0][0]): # x's equal so vertical
+        perp_line1 = (tangent_pt1, tangent_pt1 + [1, 0])
+    elif (tangent_line1[0][0][1] == tangent_line1[1][0][1]): # y's equal so horiz
+        perp_line1 = (tangent_pt1, tangent_pt1 + [0, 1])
+    else: # diagonal tangent_line1
+        perp1 = -1 *((tangent_line1[0][0][0] - tangent_line1[1][0][0]) / # -1 / ((y1 - y2) / (x1 - x2)) = -(x1-x2) / (y1-y2)
             (tangent_line1[0][0][1] - tangent_line1[1][0][1]))
-    perp2 = -1 * ((tangent_line2[0][0][0] - tangent_line2[1][0][0]) / 
+        perp_line1 = (tangent_pt1, tangent_pt1 + [1, perp1])
+
+    if (tangent_line2[0][0][0] == tangent_line2[1][0][0]): # x's equal so vertical
+        perp_line2 = (tangent_pt2, tangent_pt2 + [1, 0])
+    elif (tangent_line2[0][0][1] == tangent_line2[1][0][1]): # y's equal so horiz
+        perp_line2 = (tangent_pt2, tangent_pt2 + [0, 1])
+    else: #diagonal tangent-line2
+        perp2 = -1 * ((tangent_line2[0][0][0] - tangent_line2[1][0][0]) / 
             (tangent_line2[0][0][1] - tangent_line2[1][0][1]))
-    x = (((perp2 * tangent_pt2[0][0] - perp1 * tangent_pt1[0][0]) - 
-            (tangent_pt2[0][1] - tangent_pt1[0][1])) / (perp2 - perp1))
-    y = perp1*(x - tangent_pt1[0][0]) + tangent_pt1[0][1] 
-    return np.array([[x,y]])
+        perp_line2 = (tangent_pt2, tangent_pt2 + [1, perp2])
+    intersection = get_intersection(perp_line1[0], perp_line1[1], perp_line2[0], perp_line2[1])
+    return intersection
+    # TODO compute intersection between perp lines 
+    # x = (((perp2 * tangent_pt2[0][0] - perp1 * tangent_pt1[0][0]) - 
+    #         (tangent_pt2[0][1] - tangent_pt1[0][1])) / (perp2 - perp1))
+    # y = perp1*(x - tangent_pt1[0][0]) + tangent_pt1[0][1] 
+    # return np.array([[x,y]])
 
 def ang(lineA, lineB):
     """
