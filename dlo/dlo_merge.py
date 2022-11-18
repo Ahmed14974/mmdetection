@@ -5,8 +5,9 @@ import numpy as np
 import math
 import cv2 as cv 
 from PIL import Image, ImageDraw
+from itertools import combinations
 
-l_s = 5
+l_s = 10
 COST_THRESHOLD = 50 # TODO: TUNE THIS
 """
 Functions with *_cost calculate the cost of merging two segments. 
@@ -96,26 +97,24 @@ def merge_two_chains(c1, c2):
     index2 = to_connect[-1][-1]
     e1 = c1[index1][index1] #if head segment, grab 0th endpoint. else grab -1th
     e2 = c2[index2][index2] 
-#TODO check if this is actually good- if < l_s size gap, just straight line b/w them
-    if np.linalg.norm(e1 - e2) < l_s:
+#TODO check if this is actually good- if small gap, just straight line b/w them
+    if np.linalg.norm(e1 - e2) < l_s * 1.5:
         return concatenate_with_new_chain(to_connect, c1, c2, [(e1, e2)], True)
 
     lines_intersection = get_intersection(c1[index1][0], c1[index1][-1], 
                                             c2[index2][0], c2[index2][-1])
-                                            #TODO what if o intersection/lines parallel
+    #TODO what if no intersection/lines parallel
     dist_1 = np.linalg.norm(e1 - lines_intersection) 
     dist_2 = np.linalg.norm(e2 - lines_intersection)
     t1 = find_t(dist_1, dist_2, lines_intersection, e2[0])
     t2 = find_t(dist_2, dist_1, lines_intersection, e1[0])
     t1_ahead = is_ahead(t1, e2, c2[index2][-1 - index2])
     t2_ahead = is_ahead(t2, e1, c1[index1][-1 - index1])
-    # t1_ahead = is_ahead(dist_1, dist_2, e2, c2[index2][-1 - index2], lines_intersection)
-    # t2_ahead = is_ahead(dist_2, dist_1, e1, c1[index1][-1 - index1], lines_intersection)
     new_chain = []
     scenario = ""
     e1toe2 = True
     if t1_ahead and t2_ahead: #scenario 10b 
-        new_chain = draw_line(e1, e2)
+        new_chain = draw_line(e1, e2) #kinda hacky
         scenario = "b"
     elif t1_ahead or t2_ahead: #scenario 10a
         if t1_ahead: # use circ1. going e1 to e2.
@@ -127,7 +126,7 @@ def merge_two_chains(c1, c2):
                                             e2, e1, c2[index2], c1[index1])
         scenario = "a"   
     else:
-        new_chain = draw_line(e1, e2)
+        new_chain = draw_line(e1, e2) #again kinda hacky
         scenario = "c"
     # if scenario != "a":
     #     return [c1, c2]
@@ -164,7 +163,7 @@ def concatenate_with_new_chain(to_connect, c1, c2, new_chain, e1toe2):
 def draw_line(ei, ej):
     """
     Args: ei, ej
-    Return: chain of segments
+    Return: chain of segments connecting them
     """
     new_chain = []
     dist = np.linalg.norm(ej - ei)
@@ -187,7 +186,10 @@ def draw_line(ei, ej):
 
 def draw_arc_then_line(dist_i, dist_j, lines_intersection, 
                         ei, ej, last_segi, last_segj):
-    """Args:
+    """
+    Implement scenario a. Draw around circle ei to ti, then
+    straight line ti to ej, with fixed len segments.
+    Args:
         dist_i, dist_j float 
         lines_intersection [[float_x float_y]] 
         ei, ej [[x y]]
@@ -241,7 +243,7 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
     del_x = (ej[0][0] - p_e[0][0]) * (l_s / remaining_dist)
     del_y = (ej[0][1] - p_e[0][1]) * (l_s / remaining_dist)
     ctr = 0
-    while np.linalg.norm(ej - p_e) >= l_s:
+    while np.linalg.norm(ej - p_e) >= l_s: #TODO: refactor into draw_line fxn??
         if ctr == 10:
             break
         p_s = p_e
@@ -253,8 +255,29 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
         ctr += 1
     return new_chain
 
+def find_pair_cost(pair):
+    """
+    For a given pair of chains (c1, c2) find their min merge cost,
+    trying all end pairs.
+    """
+    c1 = pair[0]
+    c2 = pair[1]
+    combos = [[[c1[ai], ai], [c2[bi], bi]] for ai in [0,-1] for bi in [0,-1]]
+    #combos = [ [[c1[0], 0], [c2[0], 0]], [[c1[-1], -1], [c2[0], 0]], [[c1[0], 0],
+    # [c2[-1], -1]], [[c1[-1], -1], [c2[-1], -1]] ]
+    costs = []
+    for combo in combos:
+        s1, s2 = combo
+        weights = [1,1,1]
+        costs.append(merge_cost(s1, s2, weights))
+    return min(costs)
+    
+#TODO: if Lyna has implemented this, switch code out
 def merge_all_chains(pruned):
-    """Merges list of collection of chains into a single chain.
+    """Merges list of collection of chains.
+    Every step, find + try to merge pair of chains with lowest cost.
+    If cannot merge (cost > threshold), stop merging and return.
+    Remaining separate chains should be separate instances (?)
 
     Args:
         pruned: [[c1, c2, ...]]
@@ -264,19 +287,35 @@ def merge_all_chains(pruned):
         to_merge: Merged chain of form [[s1, s2, ...]].
     """
     to_merge = []
+    tried = set()
+    chain_pair_to_cost = {}
     for chain_clcn in pruned:
         for chain in chain_clcn:
             if chain:
-                # print("chain b4 merge_all is", chain)
                 to_merge.append(chain)
 
-        while len(to_merge) > 1:
-            c1 = to_merge.pop()
-            c2 = to_merge.pop()
-            merged = merge_two_chains(c1, c2)
-            to_merge.append(merged)
+        while True:
+            combs = combinations(to_merge, 2)
+            for pair in list(combs):
+                print(type(pair)) #tuple but contains lists which is a problem
+                chain_pair_to_cost[pair] = find_pair_cost(pair) 
+                #TODO: get hashable key instead. maybe ((c1_end_x, c1_end_y), (c2_end_x, c2_end_y))? 
+            pair_to_merge = min(chain_pair_to_cost, key=chain_pair_to_cost.get)
+            if pair_to_merge in tried:
+                break
+            merged = merge_two_chains(pair_to_merge[0], pair_to_merge[1])
+            if len(merged) > 1:
+                tried.add(pair_to_merge)
+            to_append += merged
+    return to_merge 
 
-    return to_merge
+    #     while len(to_merge) > 1:
+    #         c1 = to_merge.pop()
+    #         c2 = to_merge.pop()
+    #         merged = merge_two_chains(c1, c2)
+    #         to_merge.append(merged)
+
+    # return to_merge
 
 def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', color=0):
     """Generates an image of a chain.
@@ -404,12 +443,7 @@ def find_circ_center(tangent_pt1, tangent_line1, tangent_pt2, tangent_line2):
         perp_line2 = (tangent_pt2, tangent_pt2 + [1, perp2])
     intersection = get_intersection(perp_line1[0], perp_line1[1], perp_line2[0], perp_line2[1])
     return intersection
-    # TODO compute intersection between perp lines 
-    # x = (((perp2 * tangent_pt2[0][0] - perp1 * tangent_pt1[0][0]) - 
-    #         (tangent_pt2[0][1] - tangent_pt1[0][1])) / (perp2 - perp1))
-    # y = perp1*(x - tangent_pt1[0][0]) + tangent_pt1[0][1] 
-    # return np.array([[x,y]])
-
+    
 def ang(lineA, lineB):
     """
     Args:
