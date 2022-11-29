@@ -10,7 +10,7 @@ l_s = 10 # 10 pixels is their param. Can improve
 max_angle = 0.25 # radians
 rect_width = 3 #pixels
 img_dir = "dlo_test_imgs"
-img_idx = 1 #1 is causing problems with no candidates for draw circle
+img_idx = 1 
 ALL_IMGS = False
 
 def unit_vector(vector):
@@ -215,8 +215,7 @@ def dlo(img_idx):
     image = df.iloc[img_idx]['mask']   # loop over rows eventually
     image = np.load(image)      
     image_proc = np.abs(image.astype(int)).astype(np.uint8)
-    if ALL_IMGS:
-        Image.fromarray(image_proc).save(f"{img_dir}/dlo_{img_idx}_orig.png")
+    Image.fromarray(image_proc).save(f"{img_dir}/dlo_{img_idx}_orig.png")
 
     # Skeletonize
     thinned = skeleton(image)
@@ -240,14 +239,14 @@ def dlo(img_idx):
     draw_chain_collns(pruned, h, w)
 
     # merge and draw chains
-    merged = merge_all_chains(pruned) 
+    merged = merge_all_chains(pruned, h, w) 
     draw_chain(merged[0], h, w, f'dlo_test_imgs/dlo_{img_idx}_segments_merged.png')
 
     #TODO: last step, convert chains to model prediction format to evaluate p4mance
     # TBD, if this step allows for uneven length segments, fill in the < l_s length holes
 
 # dlo(img_idx)
-for img_idx in range(8, 9):
+for img_idx in range(9, 10):
     dlo(img_idx)
 
 """

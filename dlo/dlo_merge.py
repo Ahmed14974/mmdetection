@@ -66,7 +66,7 @@ def merge_cost(s1, s2, weights):
     w_c, w_d, w_e = weights
     return np.sum([w_c * curv_cost(s1,s2), w_d * dir_cost(s1,s2), w_e * euclidean_cost(s1,s2)])
 
-def merge_two_chains(c1, c2):
+def merge_two_chains(c1, c2, h, w):
     """Merges two chains based on lowest cost. Implement part H.
 
     Args:
@@ -119,11 +119,11 @@ def merge_two_chains(c1, c2):
     elif t1_ahead or t2_ahead: #scenario 10a
         if t1_ahead: # use circ1. going e1 to e2.
             new_chain = draw_arc_then_line(dist_1, dist_2, lines_intersection, 
-                                            e1, e2, c1[index1], c2[index2])        
+                                            e1, e2, c1[index1], c2[index2], h, w)        
         else: #going e2 to e1.
             e1toe2 = False
             new_chain = draw_arc_then_line(dist_2, dist_1, lines_intersection, 
-                                            e2, e1, c2[index2], c1[index1])
+                                            e2, e1, c2[index2], c1[index1], h, w)
         scenario = "a"   
     else:
         new_chain = draw_line(e1, e2) #again kinda hacky
@@ -185,7 +185,7 @@ def draw_line(ei, ej):
     return new_chain
 
 def draw_arc_then_line(dist_i, dist_j, lines_intersection, 
-                        ei, ej, last_segi, last_segj):
+                        ei, ej, last_segi, last_segj, h, w):
     """
     Implement scenario a. Draw around circle ei to ti, then
     straight line ti to ej, with fixed len segments.
@@ -214,12 +214,14 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
             p_e = candidates[1]
         p_s = p_s.astype(int)
         p_e = p_e.astype(int)
+        if out_of_bounds(p_e, h, w):
+            return []
         new_chain.append((p_s, p_e))
         print("new chain append", p_s, p_e)
         ctr = 0
         # go around the circle arc ei to ti
         while np.linalg.norm(ti - p_e) >= l_s:
-            if ctr == 10:
+            if ctr == 10: #hopefully not that big of a gap. Else buggy
                 break
             print("drawing around circle")
             prev_s = p_s
@@ -233,8 +235,10 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
                 p_e = candidates[0]
             p_s = p_s.astype(int)
             p_e = p_e.astype(int)
+            if out_of_bounds(p_e, h, w):
+                return []
             new_chain.append((p_s, p_e))
-            print(p_s, p_e)
+            #TODO: what if we get neg numbers
             ctr += 1
     else:
         new_chain = draw_line(ei, ti)
@@ -244,16 +248,23 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
     del_y = (ej[0][1] - p_e[0][1]) * (l_s / remaining_dist)
     ctr = 0
     while np.linalg.norm(ej - p_e) >= l_s: #TODO: refactor into draw_line fxn??
-        if ctr == 10:
+        if ctr == 10: #hopefully not connecting such a big gap. Else buggy
             break
         p_s = p_e
         p_e = p_s + np.array([[del_x, del_y]])
         p_s = p_s.astype(int)
         p_e = p_e.astype(int)
+        if out_of_bounds(p_e, h, w):
+            return []
         new_chain.append((p_s, p_e))
-        print(p_s, p_e)
+        #TODO: neg numbers
         ctr += 1
+    new_chain.append((p_e, ej))
+    print(new_chain)
     return new_chain
+
+def out_of_bounds(point, h, w):
+    return (point[0][0] < 0 or point[0][0] > w or point[0][1] < 0 or point[0][1] > h)
 
 def find_pair_cost(pair):
     """
@@ -273,7 +284,7 @@ def find_pair_cost(pair):
     return min(costs)
     
 #TODO: if Lyna has implemented this, switch code out
-def merge_all_chains(pruned):
+def merge_all_chains(pruned, h, w):
     """Merges list of collection of chains.
     Every step, find + try to merge pair of chains with lowest cost.
     If cannot merge (cost > threshold), stop merging and return.
@@ -294,30 +305,30 @@ def merge_all_chains(pruned):
             if chain:
                 to_merge.append(chain)
 
-        while True:
-            combs = combinations(to_merge, 2)
-            for pair in list(combs):
-                print(type(pair)) #tuple but contains lists which is a problem
-                chain_pair_to_cost[pair] = find_pair_cost(pair) 
-                #TODO: get hashable key instead. maybe ((c1_end_x, c1_end_y), (c2_end_x, c2_end_y))? 
-            pair_to_merge = min(chain_pair_to_cost, key=chain_pair_to_cost.get)
-            if pair_to_merge in tried:
-                break
-            merged = merge_two_chains(pair_to_merge[0], pair_to_merge[1])
-            if len(merged) > 1:
-                tried.add(pair_to_merge)
-            to_append += merged
-    return to_merge 
+    #     while True:
+    #         combs = combinations(to_merge, 2)
+    #         for pair in list(combs):
+    #             print(type(pair)) #tuple but contains lists which is a problem
+    #             chain_pair_to_cost[pair] = find_pair_cost(pair) 
+    #             #TODO: get hashable key instead. maybe ((c1_end_x, c1_end_y), (c2_end_x, c2_end_y))? 
+    #         pair_to_merge = min(chain_pair_to_cost, key=chain_pair_to_cost.get)
+    #         if pair_to_merge in tried:
+    #             break
+    #         merged = merge_two_chains(pair_to_merge[0], pair_to_merge[1])
+    #         if len(merged) > 1:
+    #             tried.add(pair_to_merge)
+    #         to_append += merged
+    # return to_merge 
 
-    #     while len(to_merge) > 1:
-    #         c1 = to_merge.pop()
-    #         c2 = to_merge.pop()
-    #         merged = merge_two_chains(c1, c2)
-    #         to_merge.append(merged)
+        while len(to_merge) > 1:
+            c1 = to_merge.pop()
+            c2 = to_merge.pop()
+            merged = merge_two_chains(c1, c2, h, w)
+            to_merge.append(merged)
 
-    # return to_merge
+    return to_merge
 
-def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', color=0):
+def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', color=(255,255,255), width=10):
     """Generates an image of a chain.
 
     Args:
@@ -325,11 +336,13 @@ def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', co
         h (int): Height of final img
         w (int): Width of final img
         img_path (str, optional): Save path of generated image. Defaults to 'dlo_test_imgs/dlo_segments_merged.png'.
-        color (int, optional): Desired color of drawn line. Defaults to 0.
+        color (3-tuple RGB, optional): Desired color of drawn line. Defaults to white=(255,255,255)
+        width (optional): desired line width. default 10 pixels
     """
+
     vis = np.zeros((h, w, 3), np.uint8)
     for segment in chain:
-        cv.line(vis, segment[0][0], segment[1][0], (color, 255 - color, 255), 1)
+        cv.line(vis, segment[0][0], segment[1][0], color, thickness=10)
     Image.fromarray(vis).save(img_path)
 
 def get_intersection(a1, a2, b1, b2):
