@@ -6,6 +6,9 @@ import math
 import cv2 as cv 
 from PIL import Image, ImageDraw
 from itertools import combinations
+import sys
+sys.path.append('../..')
+from eval.seg_metrics import calculate_iou 
 
 l_s = 10
 COST_THRESHOLD = 50 # TODO: TUNE THIS
@@ -328,7 +331,7 @@ def merge_all_chains(pruned, h, w):
 
     return to_merge
 
-def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', color=(255,255,255), width=10):
+def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', color=255, width=10):
     """Generates an image of a chain.
 
     Args:
@@ -336,14 +339,18 @@ def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', co
         h (int): Height of final img
         w (int): Width of final img
         img_path (str, optional): Save path of generated image. Defaults to 'dlo_test_imgs/dlo_segments_merged.png'.
-        color (3-tuple RGB, optional): Desired color of drawn line. Defaults to white=(255,255,255)
+        color (int, optional): Desired grayscale color of drawn line. Defaults to white=255
         width (optional): desired line width. default 10 pixels
     """
 
-    vis = np.zeros((h, w, 3), np.uint8)
+    vis = np.zeros((h, w), np.uint8)
     for segment in chain:
         cv.line(vis, segment[0][0], segment[1][0], color, thickness=10)
     Image.fromarray(vis).save(img_path)
+
+def calculate_dlo_iou(pred, target):
+    torch_pred = torch.from_numpy(pred)
+    return calculate_iou(torch_pred, target)
 
 def get_intersection(a1, a2, b1, b2):
     """ 
