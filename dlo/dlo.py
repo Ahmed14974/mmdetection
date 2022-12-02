@@ -4,9 +4,10 @@ import numpy as np
 from PIL import Image, ImageDraw
 import cv2 as cv 
 import itertools
+import torch
 from dlo_merge import *
 
-l_s = 10 # 10 pixels is their param. Can improve
+l_s = 8 # 10 pixels is their param. Can improve
 max_angle = 0.25 # radians
 rect_width = 3 #pixels
 img_dir = "dlo_test_imgs"
@@ -205,7 +206,8 @@ def prune(chain_colln):
     print(f"{num_intersect} intersections")
     print(chain_colln)
     return chain_colln
-            
+
+# change from input img_idx to appropriately going over model output 
 def dlo(img_idx):
     # read data. Currently dataset masks but probably want 
     # model output masks eventually
@@ -240,14 +242,24 @@ def dlo(img_idx):
 
     # merge and draw chains
     merged = merge_all_chains(pruned, h, w) 
-    draw_chain(merged[0], h, w, f'dlo_test_imgs/dlo_{img_idx}_segments_merged.png')
-
-    #TODO: last step, convert chains to model prediction format to evaluate p4mance
-    # TBD, if this step allows for uneven length segments, fill in the < l_s length holes
+    draw_chain(merged[0], h, w, f'{img_dir}/dlo_{img_idx}_segments_merged.png')
+    
+    #TODO: load ground truth image
+    post_dlo = Image.open(f'{img_dir}/dlo_{img_idx}_segments_merged.png').convert('L')
+    post_dlo_arr = np.expand_dims(np.reshape(np.array(post_dlo.getdata(), 
+                                                        dtype=np.uint8), 
+                                                        (np.shape(image_proc))), axis=0)
+    #TODO: return calculate_iou(post_dlo, ground_truth)
+    return calculate_iou(torch.from_numpy(post_dlo_arr), 
+                        torch.from_numpy(np.expand_dims(image_proc, axis=0)))
+    # note placeholder image_proc for now but this is the pre-DLO not ground truth!
+    # could be interesting to calculate difference with iou of (pre_dlo, truth)
 
 # dlo(img_idx)
-for img_idx in range(9, 10):
-    dlo(img_idx)
+ious = []
+for img_idx in range(10, 15):
+    ious.append(dlo(img_idx))
+print(ious)
 
 """
 TODO:

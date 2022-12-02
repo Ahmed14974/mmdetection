@@ -10,7 +10,7 @@ import sys
 sys.path.append('../..')
 from eval.seg_metrics import calculate_iou 
 
-l_s = 10
+l_s = 8
 COST_THRESHOLD = 50 # TODO: TUNE THIS
 """
 Functions with *_cost calculate the cost of merging two segments. 
@@ -100,17 +100,22 @@ def merge_two_chains(c1, c2, h, w):
     index2 = to_connect[-1][-1]
     e1 = c1[index1][index1] #if head segment, grab 0th endpoint. else grab -1th
     e2 = c2[index2][index2] 
-#TODO check if this is actually good- if small gap, just straight line b/w them
-    if np.linalg.norm(e1 - e2) < l_s * 1.5:
+#TODO finetune gap size- if small gap, just straight line b/w them
+    if np.linalg.norm(e1 - e2) < l_s * 2:
         return concatenate_with_new_chain(to_connect, c1, c2, [(e1, e2)], True)
 
     lines_intersection = get_intersection(c1[index1][0], c1[index1][-1], 
                                             c2[index2][0], c2[index2][-1])
-    #TODO what if no intersection/lines parallel
-    dist_1 = np.linalg.norm(e1 - lines_intersection) 
-    dist_2 = np.linalg.norm(e2 - lines_intersection)
-    t1 = find_t(dist_1, dist_2, lines_intersection, e2[0])
-    t2 = find_t(dist_2, dist_1, lines_intersection, e1[0])
+    t1 = None
+    t2 = None
+    if np.isinf(lines_intersection[0][0]): #parallel lines
+        t1 = project_point(e1, c2[index2])
+        t2 = project_point(e2, c1[index1])
+    else:
+        dist_1 = np.linalg.norm(e1 - lines_intersection) 
+        dist_2 = np.linalg.norm(e2 - lines_intersection)
+        t1 = find_t(dist_1, dist_2, lines_intersection, e2[0])
+        t2 = find_t(dist_2, dist_1, lines_intersection, e1[0])
     t1_ahead = is_ahead(t1, e2, c2[index2][-1 - index2])
     t2_ahead = is_ahead(t2, e1, c1[index1][-1 - index1])
     new_chain = []
@@ -120,19 +125,17 @@ def merge_two_chains(c1, c2, h, w):
         new_chain = draw_line(e1, e2) #kinda hacky
         scenario = "b"
     elif t1_ahead or t2_ahead: #scenario 10a
-        if t1_ahead: # use circ1. going e1 to e2.
-            new_chain = draw_arc_then_line(dist_1, dist_2, lines_intersection, 
+        if t1_ahead: # use circ1. going e1 to t1 to e2.
+            new_chain = draw_arc_then_line(dist_1, dist_2, t1, 
                                             e1, e2, c1[index1], c2[index2], h, w)        
-        else: #going e2 to e1.
+        else: #going e2 to t2 to e1.
             e1toe2 = False
-            new_chain = draw_arc_then_line(dist_2, dist_1, lines_intersection, 
+            new_chain = draw_arc_then_line(dist_2, dist_1, t2, 
                                             e2, e1, c2[index2], c1[index1], h, w)
         scenario = "a"   
     else:
         new_chain = draw_line(e1, e2) #again kinda hacky
         scenario = "c"
-    # if scenario != "a":
-    #     return [c1, c2]
     print(f"scenario {scenario}")
     print((f"chain c1 ends are {c1[:min(len(c1), 2)]} and {c1[max(-1 * len(c1), -2):]}", 
             f"chain c2 ends are {c2[:min(len(c2), 2)]} and {c2[max(-1 * len(c2), -2):]}"))
@@ -187,7 +190,7 @@ def draw_line(ei, ej):
         counter += 1
     return new_chain
 
-def draw_arc_then_line(dist_i, dist_j, lines_intersection, 
+def draw_arc_then_line(dist_i, dist_j, ti, 
                         ei, ej, last_segi, last_segj, h, w):
     """
     Implement scenario a. Draw around circle ei to ti, then
@@ -199,7 +202,7 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
         last_segi, last_segj (array([[x0 y0]]), array([[x1, y1]]))
     """
     new_chain = []
-    ti = find_t(dist_i, dist_j, lines_intersection, ej[0])
+    # ti = find_t(dist_i, dist_j, lines_intersection, ej[0])
     circi_center = find_circ_center(ei, last_segi, ti, last_segj)
     print("ei, ej, last_segi, ti, last_segj", ei, ej, last_segi, ti, last_segj)
     circi_r = np.linalg.norm(ei - circi_center) 
@@ -241,7 +244,6 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
             if out_of_bounds(p_e, h, w):
                 return []
             new_chain.append((p_s, p_e))
-            #TODO: what if we get neg numbers
             ctr += 1
     else:
         new_chain = draw_line(ei, ti)
@@ -260,7 +262,6 @@ def draw_arc_then_line(dist_i, dist_j, lines_intersection,
         if out_of_bounds(p_e, h, w):
             return []
         new_chain.append((p_s, p_e))
-        #TODO: neg numbers
         ctr += 1
     new_chain.append((p_e, ej))
     print(new_chain)
@@ -343,14 +344,10 @@ def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', co
         width (optional): desired line width. default 10 pixels
     """
 
-    vis = np.zeros((h, w), np.uint8)
+    img = np.zeros((h, w), np.uint8)
     for segment in chain:
-        cv.line(vis, segment[0][0], segment[1][0], color, thickness=10)
-    Image.fromarray(vis).save(img_path)
-
-def calculate_dlo_iou(pred, target):
-    torch_pred = torch.from_numpy(pred)
-    return calculate_iou(torch_pred, target)
+        cv.line(img, segment[0][0], segment[1][0], color, thickness=10)
+    Image.fromarray(img).save(img_path)
 
 def get_intersection(a1, a2, b1, b2):
     """ 
@@ -366,7 +363,7 @@ def get_intersection(a1, a2, b1, b2):
     l2 = np.cross(h[2], h[3])           # get second line
     x, y, z = np.cross(l1, l2)          # point of intersection
     if z == 0:                          # lines are parallel
-        return (float('inf'), float('inf'))
+        return np.array([[float('inf'), float('inf')]])
     return np.array([[x/z, y/z]])
 
 """ 
@@ -377,7 +374,6 @@ e1 closer to intersection than not e1 iff pointing toward intersection
 def is_ahead(ti, ej, tail_j):
     """
     Args: ti, ej, tail_j [[x y]] 
-
     """
     if ((ej[0][0] < ti[0][0] and ti[0][0] <= tail_j[0][0]) or 
         (ej[0][0] > ti[0][0] and ti[0][0] >= tail_j[0][0])): # ti in between ej, tail_j
@@ -385,18 +381,27 @@ def is_ahead(ti, ej, tail_j):
     dist_ti_ej = np.linalg.norm(ej - ti)
     dist_ti_tailj = np.linalg.norm(tail_j - ti)
     return dist_ti_ej < dist_ti_tailj
-"""
-def is_ahead(other_dist, seg_dist, seg_end_to_connect, other_seg_end, lines_intersection):
-    pointing_to = (seg_dist < np.linalg.norm(other_seg_end - lines_intersection))
-    return ((pointing_to and other_dist < seg_dist) or 
-            ((not pointing_to) and other_dist > seg_dist))
-"""
+
 def find_t(target_dist, other_dist, lines_intersection, other_arrow_end):
     ratio = target_dist / other_dist 
     print("find_t", target_dist, other_dist, lines_intersection, other_arrow_end)
     del_x = (lines_intersection[0][0] - other_arrow_end[0]) * ratio
     del_y = (lines_intersection[0][1] - other_arrow_end[1]) * ratio
     return np.array([[(lines_intersection[0][0] - del_x), (lines_intersection[0][1] - del_y)]])
+
+def project_point(point, line):
+    p1 = line[0]
+    p2 = line[1]
+    l2 = np.sum((p1-p2)**2)
+    if l2 == 0:
+        print('p1 and p2 are the same points')
+    #The line extending the segment is parameterized as p1 + t (p2 - p1).
+    #The projection falls where t = [(p3-p1) . (p2-p1)] / |p2-p1|^2
+
+    #if you need the point to project on line extention connecting p1 and p2
+    t = np.sum((point - p1) * (p2 - p1)) / l2
+    projection = p1 + t * (p2 - p1)
+    return projection
 
 def get_circle_intersections(x0, y0, r0, x1, y1, r1):
     "Args: x0, y0, r0 int; x1, y1, r1 float"
