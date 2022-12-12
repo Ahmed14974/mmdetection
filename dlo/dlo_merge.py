@@ -197,12 +197,10 @@ def draw_arc_then_line(dist_i, dist_j, ti,
     straight line ti to ej, with fixed len segments.
     Args:
         dist_i, dist_j float 
-        lines_intersection [[float_x float_y]] 
-        ei, ej [[x y]]
+        ei, ej, ti [[x y]]
         last_segi, last_segj (array([[x0 y0]]), array([[x1, y1]]))
     """
     new_chain = []
-    # ti = find_t(dist_i, dist_j, lines_intersection, ej[0])
     circi_center = find_circ_center(ei, last_segi, ti, last_segj)
     print("ei, ej, last_segi, ti, last_segj", ei, ej, last_segi, ti, last_segj)
     circi_r = np.linalg.norm(ei - circi_center) 
@@ -342,12 +340,16 @@ def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', co
         img_path (str, optional): Save path of generated image. Defaults to 'dlo_test_imgs/dlo_segments_merged.png'.
         color (int, optional): Desired grayscale color of drawn line. Defaults to white=255
         width (optional): desired line width. default 10 pixels
+
+    Return:
+        np array.
     """
 
     img = np.zeros((h, w), np.uint8)
     for segment in chain:
         cv.line(img, segment[0][0], segment[1][0], color, thickness=10)
     Image.fromarray(img).save(img_path)
+    return img
 
 def get_intersection(a1, a2, b1, b2):
     """ 

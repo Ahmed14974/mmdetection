@@ -10,9 +10,9 @@ from dlo_merge import *
 l_s = 8 # 10 pixels is their param. Can improve
 max_angle = 0.25 # radians
 rect_width = 3 #pixels
-img_dir = "dlo_test_imgs"
-img_idx = 1 
-ALL_IMGS = False
+img_dir = "dlo_test_imgs/dlo_from_preds_imgs"
+img_idx = 52
+ALL_IMGS = True
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
@@ -84,7 +84,7 @@ def skeleton(image):
     thinned = thin(image).astype(np.uint8)
     thinned_proc = 255 * thinned
     if ALL_IMGS:
-        Image.fromarray(thinned_proc).save(f"{img_dir}/dlo_{img_idx}_thin.png")
+        Image.fromarray(thinned_proc).save(f"{img_dir}/{img_idx}_dlo_thin.png")
     return thinned 
 
 def draw_chain_collns(chain_collns, h, w):
@@ -95,7 +95,7 @@ def draw_chain_collns(chain_collns, h, w):
             for segment in chain:
                 cv.line(vis, segment[0][0], segment[1][0], (color, 255 - color, 255), 1)
             color += 30
-    Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_segments_pruned.png")
+    Image.fromarray(vis).save(f"{img_dir}/{img_idx}_dlo_segments_pruned.png")
 
 """
 Given midpoints of opposite side of rectangle and fixed width, find corners.
@@ -208,16 +208,18 @@ def prune(chain_colln):
     return chain_colln
 
 # change from input img_idx to appropriately going over model output 
-def dlo(img_idx):
+def dlo(pred_file, truth_file):
     # read data. Currently dataset masks but probably want 
     # model output masks eventually
-    df = pd.read_csv('/deep/group/aicc-bootcamp/cloud-pollution/data/'\
-                    'combined_v3_typed_new_composite/COCO_format_cropped/train.csv')
-    df = df[df['contains_shiptrack']]
-    image = df.iloc[img_idx]['mask']   # loop over rows eventually
-    image = np.load(image)      
-    image_proc = np.abs(image.astype(int)).astype(np.uint8)
-    Image.fromarray(image_proc).save(f"{img_dir}/dlo_{img_idx}_orig.png")
+    # df = pd.read_csv('/deep/group/aicc-bootcamp/cloud-pollution/data/'\
+    #                 'combined_v3_typed_new_composite/COCO_format_cropped/train.csv')
+    # df = df[df['contains_shiptrack']]
+    # image = df.iloc[img_idx]['mask']   # loop over rows eventually
+    # image = np.load(image)      
+    # image_proc = np.abs(image.astype(int)).astype(np.uint8)
+    # Image.fromarray(image_proc).save(f"{img_dir}/dlo_{img_idx}_orig.png")
+
+    image = np.loadtxt(pred_file, dtype=np.uint8, delimiter=",")
 
     # Skeletonize
     thinned = skeleton(image)
@@ -226,14 +228,13 @@ def dlo(img_idx):
     # https://github.com/opencv/opencv/blob/4.x/samples/python/contours.py
     contours0, hierarchy = cv.findContours(thinned.copy(), mode = cv.RETR_TREE, 
                                             method = cv.CHAIN_APPROX_SIMPLE)
-    # contours = [cv.approxPolyDP(cnt, 3, True) for cnt in contours0] DONT DO THIS
     h, w = thinned.shape[:2]
     levels = 0
     vis = np.zeros((h, w, 3), np.uint8)
     cv.drawContours(vis, contours0, -1, (128,255,255), 1, cv.LINE_AA, 
                     hierarchy, abs(levels) )
     if ALL_IMGS:
-        Image.fromarray(vis).save(f"{img_dir}/dlo_{img_idx}_contour.png")
+        Image.fromarray(vis).save(f"{img_dir}/{img_idx}_dlo_contour.png")
     
     #fit and prune doo segments 
     chain_collns = [traverseContour(contour) for contour in contours0]
@@ -242,24 +243,33 @@ def dlo(img_idx):
 
     # merge and draw chains
     merged = merge_all_chains(pruned, h, w) 
-    draw_chain(merged[0], h, w, f'{img_dir}/dlo_{img_idx}_segments_merged.png')
+    merged_arr = draw_chain(merged[0], h, w, f'{img_dir}/{img_idx}_dlo_segments_merged.png')
     
-    #TODO: load ground truth image
-    post_dlo = Image.open(f'{img_dir}/dlo_{img_idx}_segments_merged.png').convert('L')
-    post_dlo_arr = np.expand_dims(np.reshape(np.array(post_dlo.getdata(), 
-                                                        dtype=np.uint8), 
-                                                        (np.shape(image_proc))), axis=0)
-    #TODO: return calculate_iou(post_dlo, ground_truth)
-    return calculate_iou(torch.from_numpy(post_dlo_arr), 
-                        torch.from_numpy(np.expand_dims(image_proc, axis=0)))
+    truth = torch.from_numpy(np.expand_dims(np.loadtxt(truth_file, 
+                                                        dtype=np.uint8, 
+                                                        delimiter=","), axis=0))
+    return [calculate_iou(torch.from_numpy(np.expand_dims(merged_arr, axis=0)), truth),
+            calculate_iou(torch.from_numpy(np.expand_dims(image, axis=0)), truth)]
+    # return [calculate_iou(torch.from_numpy(merged[0]), truth), calculate_iou(torch.from_numpy(image), truth)]
+    # #TODO: load ground truth image
+    # post_dlo = Image.open(f'{img_dir}/dlo_segments_merged.png').convert('L')
+    # post_dlo_arr = np.expand_dims(np.reshape(np.array(post_dlo.getdata(), 
+    #                                                     dtype=np.uint8), 
+    #                                                     (np.shape(image_proc))), axis=0)
+    # #TODO: return calculate_iou(post_dlo, ground_truth)
+    # return calculate_iou(torch.from_numpy(post_dlo_arr), 
+    #                     torch.from_numpy(np.expand_dims(image_proc, axis=0)))
     # note placeholder image_proc for now but this is the pre-DLO not ground truth!
     # could be interesting to calculate difference with iou of (pre_dlo, truth)
 
+iou = dlo("/deep/u/yuzu/aicc-win21-cloud-features/mmdetection/dlo/dlo_test_imgs/dlo_from_preds_imgs/52_pred.csv",
+    "/deep/u/yuzu/aicc-win21-cloud-features/mmdetection/dlo/dlo_test_imgs/dlo_from_preds_imgs/52_truth.csv")
+print(f"IOU after DLO is {iou[0]} and before is {iou[1]}")
 # dlo(img_idx)
-ious = []
-for img_idx in range(10, 15):
-    ious.append(dlo(img_idx))
-print(ious)
+# ious = []
+# for img_idx in range(14, 15):
+#     ious.append(dlo(img_idx))
+# print(ious)
 
 """
 TODO:
