@@ -10,9 +10,10 @@ from dlo_merge import *
 l_s = 8 # 10 pixels is their param. Can improve
 max_angle = 0.25 # radians
 rect_width = 3 #pixels
-img_dir = "dlo_test_imgs/dlo_from_preds_imgs"
-img_idx = 52
-ALL_IMGS = True
+img_dir = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cropped_mask_rcnn_r50_caffe_fpn_mstrain-poly_1x_coco/dlo'
+DLO_INPUT_CSV_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cropped_mask_rcnn_r50_caffe_fpn_mstrain-poly_1x_coco/dlo/dlo_paths.csv'
+img_idx = 58
+ALL_IMGS = False
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
@@ -39,10 +40,8 @@ Implemented DLO paper step D using pseudocode.
 Given contour, map chains of fixed-len line segments.
 """
 def traverseContour(cnt):
-    print(cnt.shape) #ndarray shape (num_pts, 1, 2)
     colln = []
     p_s = cnt[0]
-    print(p_s.shape)
     chain = []
     p_t = p_s 
     update_tip = True
@@ -74,7 +73,6 @@ def traverseContour(cnt):
             action_types[3] += 1
             update_tip = False
     colln.append(chain)
-    print(action_types)
     return colln
 
 """
@@ -95,7 +93,9 @@ def draw_chain_collns(chain_collns, h, w):
             for segment in chain:
                 cv.line(vis, segment[0][0], segment[1][0], (color, 255 - color, 255), 1)
             color += 30
-    Image.fromarray(vis).save(f"{img_dir}/{img_idx}_dlo_segments_pruned.png")
+    if ALL_IMGS:
+        Image.fromarray(vis).save(f"{img_dir}/{img_idx}_dlo_segments_pruned.png")
+    return vis 
 
 """
 Given midpoints of opposite side of rectangle and fixed width, find corners.
@@ -104,7 +104,7 @@ Returned in counterclockwise order.
 # https://stackoverflow.com/questions/71582441/draw-a-rectangle-using-points-using-mid-points-of-opposite-sides
 def get_corners(point1,point2,width):
     m1 = (point1[1]-point2[1])/(point1[0]-point2[0])
-    m2 = -1/m1
+    m2 = -1/m1 # TODO divide by 0??
     cor_x = np.sqrt((width/2)**2 / (m2**2 + 1))
     cor_y = np.sqrt((width/2)**2 / (m2**-2 + 1))
     if m2 >= 0:
@@ -184,7 +184,6 @@ Step E of DLO. Given collection of possibly overlapping DOO chains,
 prune overlapping segments.
 """
 def prune(chain_colln):
-    print(chain_colln)
     num_intersect = 0
     for i in range(len(chain_colln)):
         for j in range(i + 1, len(chain_colln)):
@@ -203,8 +202,6 @@ def prune(chain_colln):
                         num_intersect += 1
                         keep[k] = False
             chain_colln[shorter] = list(itertools.compress(chain_colln[shorter], keep))
-    print(f"{num_intersect} intersections")
-    print(chain_colln)
     return chain_colln
 
 # change from input img_idx to appropriately going over model output 
@@ -250,26 +247,29 @@ def dlo(pred_file, truth_file):
                                                         delimiter=","), axis=0))
     return [calculate_iou(torch.from_numpy(np.expand_dims(merged_arr, axis=0)), truth),
             calculate_iou(torch.from_numpy(np.expand_dims(image, axis=0)), truth)]
-    # return [calculate_iou(torch.from_numpy(merged[0]), truth), calculate_iou(torch.from_numpy(image), truth)]
-    # #TODO: load ground truth image
-    # post_dlo = Image.open(f'{img_dir}/dlo_segments_merged.png').convert('L')
-    # post_dlo_arr = np.expand_dims(np.reshape(np.array(post_dlo.getdata(), 
-    #                                                     dtype=np.uint8), 
-    #                                                     (np.shape(image_proc))), axis=0)
-    # #TODO: return calculate_iou(post_dlo, ground_truth)
-    # return calculate_iou(torch.from_numpy(post_dlo_arr), 
-    #                     torch.from_numpy(np.expand_dims(image_proc, axis=0)))
-    # note placeholder image_proc for now but this is the pre-DLO not ground truth!
-    # could be interesting to calculate difference with iou of (pre_dlo, truth)
 
-iou = dlo("/deep/u/yuzu/aicc-win21-cloud-features/mmdetection/dlo/dlo_test_imgs/dlo_from_preds_imgs/52_pred.csv",
-    "/deep/u/yuzu/aicc-win21-cloud-features/mmdetection/dlo/dlo_test_imgs/dlo_from_preds_imgs/52_truth.csv")
-print(f"IOU after DLO is {iou[0]} and before is {iou[1]}")
-# dlo(img_idx)
-# ious = []
-# for img_idx in range(14, 15):
-#     ious.append(dlo(img_idx))
-# print(ious)
+# iou = dlo('/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cropped_mask_rcnn_r50_caffe_fpn_mstrain-poly_1x_coco/val_predictions/58_pred.csv',
+#     "/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cropped_mask_rcnn_r50_caffe_fpn_mstrain-poly_1x_coco/val_predictions/58_truth.csv")
+# print(f"IOU after DLO is {iou[0]} and before is {iou[1]}")
+
+def main():
+    dlo_input_csv = pd.read_csv(DLO_INPUT_CSV_PATH)
+    for col in dlo_input_csv:
+        dlo_input_csv[col] = dlo_input_csv[col].sort_values(ignore_index=True)
+    preds = dlo_input_csv.loc[:, 'preds']
+    truths = dlo_input_csv.loc[:, 'truths']
+    before_pos_ious = []
+    after_pos_ious = []
+    print(f"there are {len(preds)} images") #454
+    for i in range(len(preds)):
+        ious = dlo(preds[i], truths[i])
+        before_pos_ious.append(ious[1])
+        after_pos_ious.append(ious[0])
+        if i % 50 == 0:
+            print(f"iou for image {i} b4 is {ious[1]}, iou after is {ious[0]}")
+    print(f"Mean IOU before DLO is {np.mean(before_pos_ious)} and after is {np.mean(after_pos_ious)}")
+
+main() 
 
 """
 TODO:

@@ -12,6 +12,8 @@ from eval.seg_metrics import calculate_iou
 
 l_s = 8
 COST_THRESHOLD = 50 # TODO: TUNE THIS
+ALL_IMGS = False 
+DEBUG = False 
 """
 Functions with *_cost calculate the cost of merging two segments. 
 
@@ -89,7 +91,7 @@ def merge_two_chains(c1, c2, h, w):
         s1, s2 = combo
         weights = [1,1,1]
         costs.append(merge_cost(s1, s2, weights))
-    print("costs is", costs)
+    if DEBUG: print("costs is", costs)
     if np.min(costs) > COST_THRESHOLD:
         # TODO: change this to returning two chains separately. Temp returning c1+c2 to keep working code
         return c1 + c2
@@ -126,18 +128,19 @@ def merge_two_chains(c1, c2, h, w):
         scenario = "b"
     elif t1_ahead or t2_ahead: #scenario 10a
         if t1_ahead: # use circ1. going e1 to t1 to e2.
-            new_chain = draw_arc_then_line(dist_1, dist_2, t1, 
-                                            e1, e2, c1[index1], c2[index2], h, w)        
+            new_chain = draw_arc_then_line(t1, e1, e2, c1[index1], c2[index2], 
+                                            h, w)        
         else: #going e2 to t2 to e1.
             e1toe2 = False
-            new_chain = draw_arc_then_line(dist_2, dist_1, t2, 
-                                            e2, e1, c2[index2], c1[index1], h, w)
+            new_chain = draw_arc_then_line(t2, e2, e1, c2[index2], c1[index1], 
+                                            h, w)
         scenario = "a"   
     else:
         new_chain = draw_line(e1, e2) #again kinda hacky
         scenario = "c"
-    print(f"scenario {scenario}")
-    print((f"chain c1 ends are {c1[:min(len(c1), 2)]} and {c1[max(-1 * len(c1), -2):]}", 
+    if DEBUG:
+        print(f"scenario {scenario}")
+        print((f"chain c1 ends are {c1[:min(len(c1), 2)]} and {c1[max(-1 * len(c1), -2):]}", 
             f"chain c2 ends are {c2[:min(len(c2), 2)]} and {c2[max(-1 * len(c2), -2):]}"))
     return concatenate_with_new_chain(to_connect, c1, c2, new_chain, e1toe2)
 
@@ -173,7 +176,7 @@ def draw_line(ei, ej):
     """
     new_chain = []
     dist = np.linalg.norm(ej - ei)
-    del_x = (ej[0][0] - ei[0][0]) * (l_s / dist)
+    del_x = (ej[0][0] - ei[0][0]) * (l_s / dist) #TODO: zero division
     del_y = (ej[0][1] - ei[0][1]) * (l_s / dist)
     p_s = ei
     p_e = p_s
@@ -186,32 +189,32 @@ def draw_line(ei, ej):
         p_s = p_s.astype(int)
         p_e = p_e.astype(int)
         new_chain.append((p_s, p_e))
-        print(p_s, p_e)
         counter += 1
     return new_chain
 
-def draw_arc_then_line(dist_i, dist_j, ti, 
-                        ei, ej, last_segi, last_segj, h, w):
+def draw_arc_then_line(ti, ei, ej, last_segi, last_segj, h, w):
     """
     Implement scenario a. Draw around circle ei to ti, then
     straight line ti to ej, with fixed len segments.
     Args:
-        dist_i, dist_j float 
         ei, ej, ti [[x y]]
         last_segi, last_segj (array([[x0 y0]]), array([[x1, y1]]))
     """
     new_chain = []
     circi_center = find_circ_center(ei, last_segi, ti, last_segj)
-    print("ei, ej, last_segi, ti, last_segj", ei, ej, last_segi, ti, last_segj)
+    if DEBUG: 
+        print("ei, ej, last_segi, ti, last_segj", ei, ej, last_segi, ti, last_segj)
     circi_r = np.linalg.norm(ei - circi_center) 
-    print(f"center and radius are {circi_center}, {circi_r}")
+    if DEBUG: 
+        print(f"center and radius are {circi_center}, {circi_r}")
     p_s = ei
     p_e = ei
     if circi_r >= l_s / 2:
         candidates = get_circle_intersections(ei[0][0], ei[0][1], l_s, 
                                                 circi_center[0][0], 
                                                 circi_center[0][1], circi_r)
-        print(f"candidates are {candidates}")
+        if DEBUG: 
+            print(f"candidates are {candidates}")
         if ang((candidates[0], ei), last_segi) > ang((candidates[1], ei), last_segi):
             p_e = candidates[0]
         else:
@@ -221,13 +224,15 @@ def draw_arc_then_line(dist_i, dist_j, ti,
         if out_of_bounds(p_e, h, w):
             return []
         new_chain.append((p_s, p_e))
-        print("new chain append", p_s, p_e)
+        if DEBUG:
+            print("new chain append", p_s, p_e)
         ctr = 0
         # go around the circle arc ei to ti
         while np.linalg.norm(ti - p_e) >= l_s:
             if ctr == 10: #hopefully not that big of a gap. Else buggy
                 break
-            print("drawing around circle")
+            if DEBUG:
+                print("drawing around circle")
             prev_s = p_s
             p_s = p_e 
             candidates = get_circle_intersections(p_s[0][0], p_s[0][1], l_s, 
@@ -262,7 +267,6 @@ def draw_arc_then_line(dist_i, dist_j, ti,
         new_chain.append((p_s, p_e))
         ctr += 1
     new_chain.append((p_e, ej))
-    print(new_chain)
     return new_chain
 
 def out_of_bounds(point, h, w):
@@ -348,7 +352,8 @@ def draw_chain(chain, h ,w, img_path='dlo_test_imgs/dlo_segments_merged.png', co
     img = np.zeros((h, w), np.uint8)
     for segment in chain:
         cv.line(img, segment[0][0], segment[1][0], color, thickness=10)
-    Image.fromarray(img).save(img_path)
+    if ALL_IMGS:
+        Image.fromarray(img).save(img_path)
     return img
 
 def get_intersection(a1, a2, b1, b2):
@@ -385,8 +390,9 @@ def is_ahead(ti, ej, tail_j):
     return dist_ti_ej < dist_ti_tailj
 
 def find_t(target_dist, other_dist, lines_intersection, other_arrow_end):
-    ratio = target_dist / other_dist 
-    print("find_t", target_dist, other_dist, lines_intersection, other_arrow_end)
+    ratio = target_dist / other_dist #TODO zero division??
+    if DEBUG:
+        print("find_t", target_dist, other_dist, lines_intersection, other_arrow_end)
     del_x = (lines_intersection[0][0] - other_arrow_end[0]) * ratio
     del_y = (lines_intersection[0][1] - other_arrow_end[1]) * ratio
     return np.array([[(lines_intersection[0][0] - del_x), (lines_intersection[0][1] - del_y)]])
@@ -448,7 +454,8 @@ def find_circ_center(tangent_pt1, tangent_line1, tangent_pt2, tangent_line2):
         tangent_pt2: [[x, y]]
         tangent_line2: (array([[x1, y1]]), array([[x2, y2]]))
     """
-    print("find_circ_center", tangent_pt1, tangent_line1, tangent_pt2, tangent_line2)
+    if DEBUG:
+        print("find_circ_center", tangent_pt1, tangent_line1, tangent_pt2, tangent_line2)
     perp_line1 = None
     perp_line2 = None
     if (tangent_line1[0][0][0] == tangent_line1[1][0][0]): # x's equal so vertical
@@ -479,7 +486,8 @@ def ang(lineA, lineB):
     Return:
         Angle between lineA and lineB, less than 180 degrees.
     """
-    print("ang", lineA, lineB)
+    if DEBUG:
+        print("ang", lineA, lineB)
     # Get nicer vector form
     vA = [(lineA[0][0][0]-lineA[1][0][0]), (lineA[0][0][1]-lineA[1][0][1])]
     vB = [(lineB[0][0][0]-lineB[1][0][0]), (lineB[0][0][1]-lineB[1][0][1])]
