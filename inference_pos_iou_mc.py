@@ -6,16 +6,16 @@ from PIL import Image
 import numpy as np
 from mmdet.utils import get_device
 
-VAL_IMGS_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/data/combined_v3_typed_new_composite/COCO_corrected_500/val/images/'
-VAL_CSV_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/data/combined_v3_typed_new_composite/COCO_corrected_500/val.csv'
+VAL_IMGS_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/data/combined_v3_typed_new_composite/COCO_corrected_all_w_null/val/images/'
+VAL_CSV_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/data/combined_v3_typed_new_composite/COCO_corrected_all_w_null/val.csv'
 
 val_csv = pd.read_csv(VAL_CSV_PATH)
 imgs = val_csv.loc[:,'image']
 masks = val_csv.loc[:,'mask']
 
 # Specify the path to model config and checkpoint file
-config_file = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_smcr_mask_rcnn_r101_caffe_fpn_1x_coco_1e4/logs/mask_rcnn_r101_caffe_fpn_1x_coco.py'
-checkpoint_file = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_smcr_mask_rcnn_r101_caffe_fpn_1x_coco_1e4/logs/epoch_14.pth'
+config_file = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/yuzu_iseg_cwn_solov2_r50_fpn_3x_coco_filter_0.07/configs/solov2_r50_fpn_3x_coco.py'
+checkpoint_file = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/yuzu_iseg_cwn_solov2_r50_fpn_3x_coco/logs/epoch_22.pth'
 
 # build the model from a config file and a checkpoint file
 model = init_detector(config_file, checkpoint_file, device=get_device())
@@ -30,6 +30,7 @@ for threshold in thresholds:
 
     for i in range(len(imgs)):
         result = inference_detector(model, imgs[i])
+        model.show_result(imgs[i], result, out_file=f"/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/yuzu_iseg_cwn_solov2_r50_fpn_3x_coco_filter_0.07/logs/images/{i}.png", score_thr=0.25)
         mask = np.load(masks[i])
         mask = mask.astype(np.uint8)
         mask[mask != 0] = 1
