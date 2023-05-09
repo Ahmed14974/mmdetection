@@ -541,6 +541,7 @@ class SOLOV2Head(SOLOHead):
                 lvl_mask_preds = torch.cat(lvl_mask_preds, 0)
             mlvl_mask_preds.append(lvl_mask_preds)
         # dice loss
+        breakpoint()
         num_pos = 0
         for img_pos_masks in pos_masks:
             for lvl_img_pos_masks in img_pos_masks:
