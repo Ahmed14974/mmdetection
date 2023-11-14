@@ -23,7 +23,7 @@ model  = init_detector(config_file, checkpoint_file, device=get_device())
 print(f"Val set has {len(imgs)} images")
 
 # thresholds = [0.05 * x for x in range(1, 7)] # for maskrcnn, 0.1 gives best 0.173 IOU 
-thresholds = [0.1]
+thresholds = [0.1, 0.2, 0.3, 0.4]
 # thresholds = [0.01 * x for x in range(5, 15)]
 pos_ious = []
 for threshold in thresholds:

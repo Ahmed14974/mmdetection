@@ -7,6 +7,7 @@ import numpy as np
 from mmdet.utils import get_device
 import torch
 import cv2
+import imgaug.augmenters as iaa
 
 
 def get_tp(pred, target):
@@ -92,16 +93,16 @@ def get_fn(pred, target):
 
 VAL_IMGS_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/data/combined_v3_typed_new_composite/COCO_corrected_all_w_null/test/images/'
 VAL_CSV_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/data/combined_v3_typed_new_composite/COCO_corrected_all_w_null/test.csv'
-# INF_OUT_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cwn_solov2_r101_dcn_fpn_3x_coco/test_inference_images_0.25/'
+INF_OUT_PATH = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cwn_neg_solov2_r101_dcn_fpn_3x_coco/test_inference_images_binary_0.20/'
 
 val_csv = pd.read_csv(VAL_CSV_PATH)
-imgs = val_csv.loc[:,'image']
-# imgs = sorted(os.listdir(VAL_IMGS_PATH))
+# imgs = val_csv.loc[:,'image']
+imgs = sorted(os.listdir(VAL_IMGS_PATH))
 masks = val_csv.loc[:,'mask']
 
 # Specify the path to model config and checkpoint file
-config_file = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cwn_neg_solov2_r101_dcn_fpn_3x_coco_v3/logs/solov2_r101_dcn_fpn_3x_coco.py'
-checkpoint_file = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cwn_neg_solov2_r101_dcn_fpn_3x_coco_v3/logs/epoch_22.pth'
+config_file = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cwn_neg_solov2_r101_dcn_fpn_3x_coco/logs/solov2_r101_dcn_fpn_3x_coco.py'
+checkpoint_file = '/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/mahmedc_iseg_cwn_neg_solov2_r101_dcn_fpn_3x_coco/logs/epoch_28.pth'
 
 # build the model from a config file and a checkpoint file
 model = init_detector(config_file, checkpoint_file, device=get_device())
@@ -133,14 +134,14 @@ for threshold in thresholds:
 
     for i in range(len(imgs)):
         # breakpoint()
-        # result = inference_detector(model, VAL_IMGS_PATH + imgs[i])
-        result = inference_detector(model, imgs[i])
-        # model.show_result(VAL_IMGS_PATH + imgs[i], result, out_file=INF_OUT_PATH + imgs[i], score_thr = 0.25)
+        result = inference_detector(model, VAL_IMGS_PATH + imgs[i])
+        # result = inference_detector(model, imgs[i])
+        # model.show_result(VAL_IMGS_PATH + imgs[i], result, out_file=INF_OUT_PATH + imgs[i], score_thr = 0.20)
         mask = np.load(masks[i])
         mask = mask.astype(np.uint8)
         mask[mask != 0] = 1
         
-        tracks = np.zeros(np.asarray(Image.open(imgs[i])).shape[:2])
+        tracks = np.zeros(np.asarray(Image.open(VAL_IMGS_PATH + imgs[i])).shape[:2])
         if len(result[1][0]) > 0:
             for j in range(len(result[1][0])):
                 if result[0][0][j, 4] >= threshold:
@@ -148,116 +149,128 @@ for threshold in thresholds:
                 # print(j)
 
         tracks = tracks.astype(np.uint8)
-        tracks[tracks != 0] = 1
+        # tracks[tracks != 0] = 1
+        tracks[tracks != 0] = 255
 
-        kernel_size = 11
-        kernel = np.ones((kernel_size, kernel_size), np.uint8)
-        tracks_buffed = cv2.dilate(tracks, kernel, iterations = 1)
-        mask_buffed = cv2.dilate(mask, kernel, iterations=1)
+        # tracks_resized = cv2.resize(tracks, dsize = (672,672))
+        # mask_resized = cv2.resize(mask, dsize = (672,672))
+        aug = iaa.Resize((672,672))
+        tracks_resized = aug(image = tracks)
+        mask_resized = aug(image = mask)
 
-        assert tracks.shape == mask.shape
-        assert tracks_buffed.shape == mask_buffed.shape
+        tracks_image = Image.fromarray(tracks_resized).save(INF_OUT_PATH + imgs[i])
 
-        tracks_tensor = torch.from_numpy(tracks)
-        tracks_tensor_buffed = torch.from_numpy(tracks_buffed)
-        mask_tensor = torch.from_numpy(mask)
-        mask_tensor_buffed = torch.from_numpy(mask_buffed)
+    #     kernel_size = 11
+    #     kernel = np.ones((kernel_size, kernel_size), np.uint8)
+    #     tracks_buffed = cv2.dilate(tracks_resized, kernel, iterations = 1)
+    #     mask_buffed = cv2.dilate(mask_resized, kernel, iterations=1)
 
-        if np.sum(mask) > 0:
-            intersection = tracks & mask
-            union = tracks | mask
+    #     assert tracks_resized.shape == mask_resized.shape
+    #     assert tracks_buffed.shape == mask_buffed.shape
 
-            pos_iou_list.append(np.sum(intersection) / np.sum(union))
+    #     # tracks_tensor = torch.from_numpy(tracks)
+    #     tracks_tensor = torch.from_numpy(tracks_resized)
+    #     tracks_tensor_buffed = torch.from_numpy(tracks_buffed)
+    #     # mask_tensor = torch.from_numpy(mask)
+    #     mask_tensor = torch.from_numpy(mask_resized)
+    #     mask_tensor_buffed = torch.from_numpy(mask_buffed)
 
-            TP_buffed_both = get_tp(tracks_tensor_buffed, mask_tensor_buffed)
-            FP_gt_buffed = get_fp(tracks_tensor, mask_tensor_buffed)
-            FN_preds_buffed = get_fn(tracks_tensor_buffed, mask_tensor)
+    #     if np.sum(mask) > 0:
+    #         intersection = tracks & mask
+    #         union = tracks | mask
+
+    #         pos_iou_list.append(np.sum(intersection) / np.sum(union))
+
+    #         TP_buffed_both = get_tp(tracks_tensor_buffed, mask_tensor_buffed)
+    #         FP_gt_buffed = get_fp(tracks_tensor, mask_tensor_buffed)
+    #         FN_preds_buffed = get_fn(tracks_tensor_buffed, mask_tensor)
             
-            # intersection_buffed = tracks & mask_buffed
-            # union_buffed = tracks | mask_buffed
-            # intersection_buffed_both = tracks_buffed & mask_buffed
-            # union_buffed_both = tracks_buffed | mask_buffed
-            intersection_gt_buffed = tracks & mask_buffed
-            # pos_iou_list_buffed.append(np.sum(intersection_buffed) / np.sum(union_buffed))
-            # pos_iou_list_buffed_both.append(np.sum(intersection_buffed_both) / np.sum(union_buffed_both))
-            pos_iou_list_int_gt_buffed.append(np.sum(intersection_gt_buffed) / np.sum(union))
+    #         # intersection_buffed = tracks & mask_buffed
+    #         # union_buffed = tracks | mask_buffed
+    #         # intersection_buffed_both = tracks_buffed & mask_buffed
+    #         # union_buffed_both = tracks_buffed | mask_buffed
+    #         # intersection_gt_buffed = tracks & mask_buffed
+    #         # pos_iou_list_buffed.append(np.sum(intersection_buffed) / np.sum(union_buffed))
+    #         # pos_iou_list_buffed_both.append(np.sum(intersection_buffed_both) / np.sum(union_buffed_both))
+    #         # pos_iou_list_int_gt_buffed.append(np.sum(intersection_gt_buffed) / np.sum(union))
             
-            pos_iou_optimized_list.append((TP_buffed_both)/(TP_buffed_both + FN_preds_buffed + FP_gt_buffed))
+    #         pos_iou_optimized_list.append((TP_buffed_both)/(TP_buffed_both + FN_preds_buffed + FP_gt_buffed))
         
 
-        # TP_list.append(get_tp(tracks_tensor, mask_tensor_buffed))
-        # TN_list.append(get_tn(tracks_tensor, mask_tensor_buffed))
-        # FP_list.append(get_fp(tracks_tensor, mask_tensor_buffed))
-        # FN_list.append(get_fn(tracks_tensor, mask_tensor_buffed))
+    #     # TP_list.append(get_tp(tracks_tensor, mask_tensor_buffed))
+    #     # TN_list.append(get_tn(tracks_tensor, mask_tensor_buffed))
+    #     # FP_list.append(get_fp(tracks_tensor, mask_tensor_buffed))
+    #     # FN_list.append(get_fn(tracks_tensor, mask_tensor_buffed))
     
-        TP_list.append(get_tp(tracks_tensor, mask_tensor))
-        TN_list.append(get_tn(tracks_tensor, mask_tensor))
-        FP_list.append(get_fp(tracks_tensor, mask_tensor))
-        FN_list.append(get_fn(tracks_tensor, mask_tensor))
+    #     TP_list.append(get_tp(tracks_tensor, mask_tensor))
+    #     TN_list.append(get_tn(tracks_tensor, mask_tensor))
+    #     FP_list.append(get_fp(tracks_tensor, mask_tensor))
+    #     FN_list.append(get_fn(tracks_tensor, mask_tensor))
 
-        TP_gt_buffed_list.append(get_tp(tracks_tensor, mask_tensor_buffed))
-        TN_gt_buffed_list.append(get_tn(tracks_tensor, mask_tensor_buffed))
-        FP_gt_buffed_list.append(get_fp(tracks_tensor, mask_tensor_buffed))
-        FN_gt_buffed_list.append(get_fn(tracks_tensor, mask_tensor_buffed))
+    #     TP_gt_buffed_list.append(get_tp(tracks_tensor, mask_tensor_buffed))
+    #     TN_gt_buffed_list.append(get_tn(tracks_tensor, mask_tensor_buffed))
+    #     FP_gt_buffed_list.append(get_fp(tracks_tensor, mask_tensor_buffed))
+    #     FN_gt_buffed_list.append(get_fn(tracks_tensor, mask_tensor_buffed))
 
-        TP_preds_buffed_list.append(get_tp(tracks_tensor_buffed, mask_tensor))
-        TN_preds_buffed_list.append(get_tn(tracks_tensor_buffed, mask_tensor))
-        FP_preds_buffed_list.append(get_fp(tracks_tensor_buffed, mask_tensor))
-        FN_preds_buffed_list.append(get_fn(tracks_tensor_buffed, mask_tensor))
+    #     TP_preds_buffed_list.append(get_tp(tracks_tensor_buffed, mask_tensor))
+    #     TN_preds_buffed_list.append(get_tn(tracks_tensor_buffed, mask_tensor))
+    #     FP_preds_buffed_list.append(get_fp(tracks_tensor_buffed, mask_tensor))
+    #     FN_preds_buffed_list.append(get_fn(tracks_tensor_buffed, mask_tensor))
 
 
-    assert len(TP_list)  == len(imgs)
-    assert len(TN_list)  == len(imgs)
-    assert len(FP_list)  == len(imgs)
-    assert len(FN_list)  == len(imgs)
+    # assert len(TP_list)  == len(imgs)
+    # assert len(TN_list)  == len(imgs)
+    # assert len(FP_list)  == len(imgs)
+    # assert len(FN_list)  == len(imgs)
 
-    assert len(TP_preds_buffed_list)  == len(imgs)
-    assert len(TN_preds_buffed_list)  == len(imgs)
-    assert len(FP_preds_buffed_list)  == len(imgs)
-    assert len(FN_preds_buffed_list)  == len(imgs)
+    # assert len(TP_preds_buffed_list)  == len(imgs)
+    # assert len(TN_preds_buffed_list)  == len(imgs)
+    # assert len(FP_preds_buffed_list)  == len(imgs)
+    # assert len(FN_preds_buffed_list)  == len(imgs)
 
-    assert len(TP_gt_buffed_list)  == len(imgs)
-    assert len(TN_gt_buffed_list)  == len(imgs)
-    assert len(FP_gt_buffed_list)  == len(imgs)
-    assert len(FN_gt_buffed_list)  == len(imgs)
+    # assert len(TP_gt_buffed_list)  == len(imgs)
+    # assert len(TN_gt_buffed_list)  == len(imgs)
+    # assert len(FP_gt_buffed_list)  == len(imgs)
+    # assert len(FN_gt_buffed_list)  == len(imgs)
     
-    precision = float(sum(TP_list)) / float(sum(TP_list) + sum(FP_list))
-    precision_gt_buffed = float(sum(TP_gt_buffed_list)) / float(sum(TP_gt_buffed_list) + sum(FP_gt_buffed_list))
-    precision_optimized = float(sum(TP_gt_buffed_list)) / float(sum(TP_gt_buffed_list) + sum(FP_gt_buffed_list))
+    # precision = float(sum(TP_list)) / float(sum(TP_list) + sum(FP_list))
+    # precision_gt_buffed = float(sum(TP_gt_buffed_list)) / float(sum(TP_gt_buffed_list) + sum(FP_gt_buffed_list))
+    # precision_optimized = float(sum(TP_gt_buffed_list)) / float(sum(TP_gt_buffed_list) + sum(FP_gt_buffed_list))
 
-    sensitivity = float(sum(TP_list)) / float(sum(TP_list) + sum(FN_list))
-    sensitivity_gt_buffed = float(sum(TP_gt_buffed_list)) / float(sum(TP_gt_buffed_list) + sum(FN_gt_buffed_list))
-    sensitivity_optimized = float(sum(TP_preds_buffed_list)) / float(sum(TP_preds_buffed_list) + sum(FN_preds_buffed_list))
+    # sensitivity = float(sum(TP_list)) / float(sum(TP_list) + sum(FN_list))
+    # sensitivity_gt_buffed = float(sum(TP_gt_buffed_list)) / float(sum(TP_gt_buffed_list) + sum(FN_gt_buffed_list))
+    # sensitivity_optimized = float(sum(TP_preds_buffed_list)) / float(sum(TP_preds_buffed_list) + sum(FN_preds_buffed_list))
 
-    specificity = float(sum(TN_list)) / float(sum(TN_list) + sum(FP_list))
-    specificity_gt_buffed = float(sum(TN_gt_buffed_list)) / float(sum(TN_gt_buffed_list) + sum(FP_gt_buffed_list))
-    specificity_optimized = float(sum(TN_gt_buffed_list)) / float(sum(TN_gt_buffed_list) + sum(FP_gt_buffed_list))
+    # specificity = float(sum(TN_list)) / float(sum(TN_list) + sum(FP_list))
+    # specificity_gt_buffed = float(sum(TN_gt_buffed_list)) / float(sum(TN_gt_buffed_list) + sum(FP_gt_buffed_list))
+    # specificity_optimized = float(sum(TN_gt_buffed_list)) / float(sum(TN_gt_buffed_list) + sum(FP_gt_buffed_list))
 
-    f1_score = float(precision * sensitivity) / float(precision + sensitivity)
-    f1_score_gt_buffed = float(precision_gt_buffed * sensitivity_gt_buffed) / float(precision_gt_buffed + sensitivity_gt_buffed)
-    f1_score_optimized = float(precision_optimized * sensitivity_optimized) / float(precision_optimized + sensitivity_optimized)
+    # f1_score = float(precision * sensitivity) / float(precision + sensitivity)
+    # f1_score_gt_buffed = float(precision_gt_buffed * sensitivity_gt_buffed) / float(precision_gt_buffed + sensitivity_gt_buffed)
+    # f1_score_optimized = float(precision_optimized * sensitivity_optimized) / float(precision_optimized + sensitivity_optimized)
 
-    print(f"The kernel size is {kernel_size}")
-    print(f"{checkpoint_file}")
-    print(f"With a threshold value of {threshold}, the positive IOU value is {np.mean(pos_iou_list)}")
-    # print(f"With a threshold value of {threshold}, the positive IOU buffed value is {np.mean(pos_iou_list_buffed)}")
-    # print(f"With a threshold value of {threshold}, the positive IOU buffed (both) value is {np.mean(pos_iou_list_buffed_both)}")
-    print(f"With a threshold value of {threshold}, the positive IOU with ground truth buffed in intersection only is {np.mean(pos_iou_list_int_gt_buffed)}")
-    print(f"With a threshold value of {threshold}, the positive IOU optimized is {np.mean(pos_iou_optimized_list)}")
-    # print(f"With a threshold value of {threshold}, the precision with ground truth buffed is {precision}")
-    # print(f"With a threshold value of {threshold}, the sensitivity with ground truth buffed is {sensitivity}")
-    # print(f"With a threshold value of {threshold}, the specificity with ground truth buffed is {specificity}")
-    # print(f"With a threshold value of {threshold}, the f1-score with ground truth buffed is {f1_score}")
-    print(f"With a threshold value of {threshold}, the precision is {precision}")
-    print(f"With a threshold value of {threshold}, the precision with ground truth buffed is {precision_gt_buffed}")
-    print(f"With a threshold value of {threshold}, the precision optimized is {precision_optimized}")
-    print(f"With a threshold value of {threshold}, the sensitivity is {sensitivity}")
-    print(f"With a threshold value of {threshold}, the sensitivity with ground truth buffed is {sensitivity_gt_buffed}")
-    print(f"With a threshold value of {threshold}, the sensitivity optimized is {sensitivity_optimized}")
-    print(f"With a threshold value of {threshold}, the specificity is {specificity}")
-    print(f"With a threshold value of {threshold}, the specificity with ground truth buffed is {specificity_gt_buffed}")
-    print(f"With a threshold value of {threshold}, the specificity optimized is {specificity_optimized}")
-    print(f"With a threshold value of {threshold}, the f1-score is {f1_score}")
-    print(f"With a threshold value of {threshold}, the f1-score with ground truth buffed is {f1_score_gt_buffed}")
-    print(f"With a threshold value of {threshold}, the f1-score optimized is {f1_score_optimized}")
-    print("Done")
+    # print(f"The kernel size is {kernel_size}")
+    # print(f"{checkpoint_file}")
+    # print(f"The prediction image size for evaluation is {tracks_resized.shape}")
+    # print(f"With a threshold value of {threshold}, the positive IOU value is {np.mean(pos_iou_list)}")
+    # # print(f"With a threshold value of {threshold}, the positive IOU buffed value is {np.mean(pos_iou_list_buffed)}")
+    # # print(f"With a threshold value of {threshold}, the positive IOU buffed (both) value is {np.mean(pos_iou_list_buffed_both)}")
+    # # print(f"With a threshold value of {threshold}, the positive IOU with ground truth buffed in intersection only is {np.mean(pos_iou_list_int_gt_buffed)}")
+    # print(f"With a threshold value of {threshold}, the positive IOU optimized is {np.mean(pos_iou_optimized_list)}")
+    # # print(f"With a threshold value of {threshold}, the precision with ground truth buffed is {precision}")
+    # # print(f"With a threshold value of {threshold}, the sensitivity with ground truth buffed is {sensitivity}")
+    # # print(f"With a threshold value of {threshold}, the specificity with ground truth buffed is {specificity}")
+    # # print(f"With a threshold value of {threshold}, the f1-score with ground truth buffed is {f1_score}")
+    # print(f"With a threshold value of {threshold}, the precision is {precision}")
+    # print(f"With a threshold value of {threshold}, the precision with ground truth buffed is {precision_gt_buffed}")
+    # print(f"With a threshold value of {threshold}, the precision optimized is {precision_optimized}")
+    # print(f"With a threshold value of {threshold}, the sensitivity is {sensitivity}")
+    # print(f"With a threshold value of {threshold}, the sensitivity with ground truth buffed is {sensitivity_gt_buffed}")
+    # print(f"With a threshold value of {threshold}, the sensitivity optimized is {sensitivity_optimized}")
+    # print(f"With a threshold value of {threshold}, the specificity is {specificity}")
+    # print(f"With a threshold value of {threshold}, the specificity with ground truth buffed is {specificity_gt_buffed}")
+    # print(f"With a threshold value of {threshold}, the specificity optimized is {specificity_optimized}")
+    # print(f"With a threshold value of {threshold}, the f1-score is {f1_score}")
+    # print(f"With a threshold value of {threshold}, the f1-score with ground truth buffed is {f1_score_gt_buffed}")
+    # print(f"With a threshold value of {threshold}, the f1-score optimized is {f1_score_optimized}")
+    # print("Done")
