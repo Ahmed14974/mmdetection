@@ -137,6 +137,7 @@ for threshold in thresholds:
         result = inference_detector(model, VAL_IMGS_PATH + imgs[i])
         # result = inference_detector(model, imgs[i])
         # model.show_result(VAL_IMGS_PATH + imgs[i], result, out_file=INF_OUT_PATH + imgs[i], score_thr = 0.20)
+        model.show_result(imgs[i], result, out_file=f"/deep/group/aicc-bootcamp/cloud-pollution/models/sandbox/yuzu_iseg_cwn_solov2_r50_fpn_3x_coco_filter_0.07/logs/images/{i}.png", score_thr=0.25)
         mask = np.load(masks[i])
         mask = mask.astype(np.uint8)
         mask[mask != 0] = 1
